@@ -117,6 +117,386 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 	return i, err
 }
 
+const createCharacterAction = `-- name: CreateCharacterAction :one
+INSERT INTO character_actions (
+    character_id, sort_order, name, action_type, source, description, uses_per, uses_max, uses_current
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, character_id, sort_order, name, action_type, source, description, uses_per, uses_max, uses_current, created_at
+`
+
+type CreateCharacterActionParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	SortOrder   pgtype.Int4 `json:"sort_order"`
+	Name        string      `json:"name"`
+	ActionType  pgtype.Text `json:"action_type"`
+	Source      pgtype.Text `json:"source"`
+	Description pgtype.Text `json:"description"`
+	UsesPer     pgtype.Text `json:"uses_per"`
+	UsesMax     pgtype.Int4 `json:"uses_max"`
+	UsesCurrent pgtype.Int4 `json:"uses_current"`
+}
+
+func (q *Queries) CreateCharacterAction(ctx context.Context, arg CreateCharacterActionParams) (CharacterAction, error) {
+	row := q.db.QueryRow(ctx, createCharacterAction,
+		arg.CharacterID,
+		arg.SortOrder,
+		arg.Name,
+		arg.ActionType,
+		arg.Source,
+		arg.Description,
+		arg.UsesPer,
+		arg.UsesMax,
+		arg.UsesCurrent,
+	)
+	var i CharacterAction
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.ActionType,
+		&i.Source,
+		&i.Description,
+		&i.UsesPer,
+		&i.UsesMax,
+		&i.UsesCurrent,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCharacterAttack = `-- name: CreateCharacterAttack :one
+INSERT INTO character_attacks (
+    character_id, sort_order, name, attack_bonus, damage, damage_type, range, properties, notes
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, character_id, sort_order, name, attack_bonus, damage, damage_type, range, properties, notes, created_at
+`
+
+type CreateCharacterAttackParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	SortOrder   pgtype.Int4 `json:"sort_order"`
+	Name        string      `json:"name"`
+	AttackBonus pgtype.Int4 `json:"attack_bonus"`
+	Damage      pgtype.Text `json:"damage"`
+	DamageType  pgtype.Text `json:"damage_type"`
+	Range       pgtype.Text `json:"range"`
+	Properties  pgtype.Text `json:"properties"`
+	Notes       pgtype.Text `json:"notes"`
+}
+
+func (q *Queries) CreateCharacterAttack(ctx context.Context, arg CreateCharacterAttackParams) (CharacterAttack, error) {
+	row := q.db.QueryRow(ctx, createCharacterAttack,
+		arg.CharacterID,
+		arg.SortOrder,
+		arg.Name,
+		arg.AttackBonus,
+		arg.Damage,
+		arg.DamageType,
+		arg.Range,
+		arg.Properties,
+		arg.Notes,
+	)
+	var i CharacterAttack
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.AttackBonus,
+		&i.Damage,
+		&i.DamageType,
+		&i.Range,
+		&i.Properties,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCharacterCurrency = `-- name: CreateCharacterCurrency :one
+INSERT INTO character_currency (character_id)
+VALUES ($1)
+RETURNING id, character_id, copper, silver, electrum, gold, platinum
+`
+
+func (q *Queries) CreateCharacterCurrency(ctx context.Context, characterID pgtype.UUID) (CharacterCurrency, error) {
+	row := q.db.QueryRow(ctx, createCharacterCurrency, characterID)
+	var i CharacterCurrency
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Copper,
+		&i.Silver,
+		&i.Electrum,
+		&i.Gold,
+		&i.Platinum,
+	)
+	return i, err
+}
+
+const createCharacterDetails = `-- name: CreateCharacterDetails :one
+INSERT INTO character_details (character_id)
+VALUES ($1)
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+`
+
+func (q *Queries) CreateCharacterDetails(ctx context.Context, characterID pgtype.UUID) (CharacterDetail, error) {
+	row := q.db.QueryRow(ctx, createCharacterDetails, characterID)
+	var i CharacterDetail
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Age,
+		&i.Height,
+		&i.Weight,
+		&i.Eyes,
+		&i.Skin,
+		&i.Hair,
+		&i.FaithDeity,
+		&i.PersonalityTraits,
+		&i.Ideals,
+		&i.Bonds,
+		&i.Flaws,
+		&i.Backstory,
+		&i.AlliesOrganizations,
+		&i.Inspiration,
+		&i.DeathSaveSuccesses,
+		&i.DeathSaveFailures,
+		&i.HitDiceUsed,
+	)
+	return i, err
+}
+
+const createCharacterFeature = `-- name: CreateCharacterFeature :one
+INSERT INTO character_features (
+    character_id, sort_order, name, source, source_type, description
+) VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, character_id, sort_order, name, source, source_type, description, created_at
+`
+
+type CreateCharacterFeatureParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	SortOrder   pgtype.Int4 `json:"sort_order"`
+	Name        string      `json:"name"`
+	Source      pgtype.Text `json:"source"`
+	SourceType  pgtype.Text `json:"source_type"`
+	Description pgtype.Text `json:"description"`
+}
+
+func (q *Queries) CreateCharacterFeature(ctx context.Context, arg CreateCharacterFeatureParams) (CharacterFeature, error) {
+	row := q.db.QueryRow(ctx, createCharacterFeature,
+		arg.CharacterID,
+		arg.SortOrder,
+		arg.Name,
+		arg.Source,
+		arg.SourceType,
+		arg.Description,
+	)
+	var i CharacterFeature
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Source,
+		&i.SourceType,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCharacterInventoryItem = `-- name: CreateCharacterInventoryItem :one
+INSERT INTO character_inventory (
+    character_id, sort_order, name, quantity, weight, location, notes, is_equipped
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, character_id, sort_order, name, quantity, weight, location, notes, is_equipped, created_at
+`
+
+type CreateCharacterInventoryItemParams struct {
+	CharacterID pgtype.UUID    `json:"character_id"`
+	SortOrder   pgtype.Int4    `json:"sort_order"`
+	Name        string         `json:"name"`
+	Quantity    pgtype.Int4    `json:"quantity"`
+	Weight      pgtype.Numeric `json:"weight"`
+	Location    pgtype.Text    `json:"location"`
+	Notes       pgtype.Text    `json:"notes"`
+	IsEquipped  pgtype.Bool    `json:"is_equipped"`
+}
+
+func (q *Queries) CreateCharacterInventoryItem(ctx context.Context, arg CreateCharacterInventoryItemParams) (CharacterInventory, error) {
+	row := q.db.QueryRow(ctx, createCharacterInventoryItem,
+		arg.CharacterID,
+		arg.SortOrder,
+		arg.Name,
+		arg.Quantity,
+		arg.Weight,
+		arg.Location,
+		arg.Notes,
+		arg.IsEquipped,
+	)
+	var i CharacterInventory
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Quantity,
+		&i.Weight,
+		&i.Location,
+		&i.Notes,
+		&i.IsEquipped,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCharacterMagicItem = `-- name: CreateCharacterMagicItem :one
+INSERT INTO character_magic_items (
+    character_id, sort_order, name, rarity, attunement_required, is_attuned, weight, description
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, character_id, sort_order, name, rarity, attunement_required, is_attuned, weight, description, created_at
+`
+
+type CreateCharacterMagicItemParams struct {
+	CharacterID        pgtype.UUID    `json:"character_id"`
+	SortOrder          pgtype.Int4    `json:"sort_order"`
+	Name               string         `json:"name"`
+	Rarity             pgtype.Text    `json:"rarity"`
+	AttunementRequired pgtype.Bool    `json:"attunement_required"`
+	IsAttuned          pgtype.Bool    `json:"is_attuned"`
+	Weight             pgtype.Numeric `json:"weight"`
+	Description        pgtype.Text    `json:"description"`
+}
+
+func (q *Queries) CreateCharacterMagicItem(ctx context.Context, arg CreateCharacterMagicItemParams) (CharacterMagicItem, error) {
+	row := q.db.QueryRow(ctx, createCharacterMagicItem,
+		arg.CharacterID,
+		arg.SortOrder,
+		arg.Name,
+		arg.Rarity,
+		arg.AttunementRequired,
+		arg.IsAttuned,
+		arg.Weight,
+		arg.Description,
+	)
+	var i CharacterMagicItem
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Rarity,
+		&i.AttunementRequired,
+		&i.IsAttuned,
+		&i.Weight,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCharacterSpell = `-- name: CreateCharacterSpell :one
+INSERT INTO character_spells (
+    character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source, created_at
+`
+
+type CreateCharacterSpellParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	Name        string      `json:"name"`
+	Level       int32       `json:"level"`
+	School      pgtype.Text `json:"school"`
+	IsPrepared  pgtype.Bool `json:"is_prepared"`
+	IsRitual    pgtype.Bool `json:"is_ritual"`
+	CastingTime pgtype.Text `json:"casting_time"`
+	Range       pgtype.Text `json:"range"`
+	Components  pgtype.Text `json:"components"`
+	Duration    pgtype.Text `json:"duration"`
+	Description pgtype.Text `json:"description"`
+	Source      pgtype.Text `json:"source"`
+}
+
+func (q *Queries) CreateCharacterSpell(ctx context.Context, arg CreateCharacterSpellParams) (CharacterSpell, error) {
+	row := q.db.QueryRow(ctx, createCharacterSpell,
+		arg.CharacterID,
+		arg.Name,
+		arg.Level,
+		arg.School,
+		arg.IsPrepared,
+		arg.IsRitual,
+		arg.CastingTime,
+		arg.Range,
+		arg.Components,
+		arg.Duration,
+		arg.Description,
+		arg.Source,
+	)
+	var i CharacterSpell
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Name,
+		&i.Level,
+		&i.School,
+		&i.IsPrepared,
+		&i.IsRitual,
+		&i.CastingTime,
+		&i.Range,
+		&i.Components,
+		&i.Duration,
+		&i.Description,
+		&i.Source,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCharacterSpellcasting = `-- name: CreateCharacterSpellcasting :one
+INSERT INTO character_spellcasting (character_id, spellcasting_class, spellcasting_ability)
+VALUES ($1, $2, $3)
+RETURNING id, character_id, spellcasting_class, spellcasting_ability, spell_save_dc, spell_attack_bonus, slots_1_max, slots_1_used, slots_2_max, slots_2_used, slots_3_max, slots_3_used, slots_4_max, slots_4_used, slots_5_max, slots_5_used, slots_6_max, slots_6_used, slots_7_max, slots_7_used, slots_8_max, slots_8_used, slots_9_max, slots_9_used
+`
+
+type CreateCharacterSpellcastingParams struct {
+	CharacterID         pgtype.UUID `json:"character_id"`
+	SpellcastingClass   pgtype.Text `json:"spellcasting_class"`
+	SpellcastingAbility pgtype.Text `json:"spellcasting_ability"`
+}
+
+func (q *Queries) CreateCharacterSpellcasting(ctx context.Context, arg CreateCharacterSpellcastingParams) (CharacterSpellcasting, error) {
+	row := q.db.QueryRow(ctx, createCharacterSpellcasting, arg.CharacterID, arg.SpellcastingClass, arg.SpellcastingAbility)
+	var i CharacterSpellcasting
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SpellcastingClass,
+		&i.SpellcastingAbility,
+		&i.SpellSaveDc,
+		&i.SpellAttackBonus,
+		&i.Slots1Max,
+		&i.Slots1Used,
+		&i.Slots2Max,
+		&i.Slots2Used,
+		&i.Slots3Max,
+		&i.Slots3Used,
+		&i.Slots4Max,
+		&i.Slots4Used,
+		&i.Slots5Max,
+		&i.Slots5Used,
+		&i.Slots6Max,
+		&i.Slots6Used,
+		&i.Slots7Max,
+		&i.Slots7Used,
+		&i.Slots8Max,
+		&i.Slots8Used,
+		&i.Slots9Max,
+		&i.Slots9Used,
+	)
+	return i, err
+}
+
 const createUserWithBoth = `-- name: CreateUserWithBoth :one
 INSERT INTO users (email, password_hash, public_key)
 VALUES ($1, $2, $3)
@@ -188,12 +568,39 @@ func (q *Queries) CreateUserWithPublicKey(ctx context.Context, publicKey pgtype.
 	return i, err
 }
 
+const deleteAllCharacterAttacks = `-- name: DeleteAllCharacterAttacks :exec
+DELETE FROM character_attacks WHERE character_id = $1
+`
+
+func (q *Queries) DeleteAllCharacterAttacks(ctx context.Context, characterID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllCharacterAttacks, characterID)
+	return err
+}
+
 const deleteCharacter = `-- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1
 `
 
 func (q *Queries) DeleteCharacter(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteCharacter, id)
+	return err
+}
+
+const deleteCharacterAction = `-- name: DeleteCharacterAction :exec
+DELETE FROM character_actions WHERE id = $1
+`
+
+func (q *Queries) DeleteCharacterAction(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharacterAction, id)
+	return err
+}
+
+const deleteCharacterAttack = `-- name: DeleteCharacterAttack :exec
+DELETE FROM character_attacks WHERE id = $1
+`
+
+func (q *Queries) DeleteCharacterAttack(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharacterAttack, id)
 	return err
 }
 
@@ -211,6 +618,42 @@ func (q *Queries) DeleteCharacterByUserID(ctx context.Context, arg DeleteCharact
 	return err
 }
 
+const deleteCharacterFeature = `-- name: DeleteCharacterFeature :exec
+DELETE FROM character_features WHERE id = $1
+`
+
+func (q *Queries) DeleteCharacterFeature(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharacterFeature, id)
+	return err
+}
+
+const deleteCharacterInventoryItem = `-- name: DeleteCharacterInventoryItem :exec
+DELETE FROM character_inventory WHERE id = $1
+`
+
+func (q *Queries) DeleteCharacterInventoryItem(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharacterInventoryItem, id)
+	return err
+}
+
+const deleteCharacterMagicItem = `-- name: DeleteCharacterMagicItem :exec
+DELETE FROM character_magic_items WHERE id = $1
+`
+
+func (q *Queries) DeleteCharacterMagicItem(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharacterMagicItem, id)
+	return err
+}
+
+const deleteCharacterSpell = `-- name: DeleteCharacterSpell :exec
+DELETE FROM character_spells WHERE id = $1
+`
+
+func (q *Queries) DeleteCharacterSpell(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharacterSpell, id)
+	return err
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1
 `
@@ -218,6 +661,132 @@ DELETE FROM users WHERE id = $1
 func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
+}
+
+const getCharacterActionByID = `-- name: GetCharacterActionByID :one
+SELECT id, character_id, sort_order, name, action_type, source, description, uses_per, uses_max, uses_current, created_at FROM character_actions WHERE id = $1
+`
+
+func (q *Queries) GetCharacterActionByID(ctx context.Context, id pgtype.UUID) (CharacterAction, error) {
+	row := q.db.QueryRow(ctx, getCharacterActionByID, id)
+	var i CharacterAction
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.ActionType,
+		&i.Source,
+		&i.Description,
+		&i.UsesPer,
+		&i.UsesMax,
+		&i.UsesCurrent,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCharacterActions = `-- name: GetCharacterActions :many
+
+SELECT id, character_id, sort_order, name, action_type, source, description, uses_per, uses_max, uses_current, created_at FROM character_actions WHERE character_id = $1 ORDER BY sort_order
+`
+
+// ============================================
+// Character Actions Queries
+// ============================================
+func (q *Queries) GetCharacterActions(ctx context.Context, characterID pgtype.UUID) ([]CharacterAction, error) {
+	rows, err := q.db.Query(ctx, getCharacterActions, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterAction{}
+	for rows.Next() {
+		var i CharacterAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.SortOrder,
+			&i.Name,
+			&i.ActionType,
+			&i.Source,
+			&i.Description,
+			&i.UsesPer,
+			&i.UsesMax,
+			&i.UsesCurrent,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharacterAttackByID = `-- name: GetCharacterAttackByID :one
+SELECT id, character_id, sort_order, name, attack_bonus, damage, damage_type, range, properties, notes, created_at FROM character_attacks WHERE id = $1
+`
+
+func (q *Queries) GetCharacterAttackByID(ctx context.Context, id pgtype.UUID) (CharacterAttack, error) {
+	row := q.db.QueryRow(ctx, getCharacterAttackByID, id)
+	var i CharacterAttack
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.AttackBonus,
+		&i.Damage,
+		&i.DamageType,
+		&i.Range,
+		&i.Properties,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCharacterAttacks = `-- name: GetCharacterAttacks :many
+
+SELECT id, character_id, sort_order, name, attack_bonus, damage, damage_type, range, properties, notes, created_at FROM character_attacks WHERE character_id = $1 ORDER BY sort_order
+`
+
+// ============================================
+// Character Attacks Queries
+// ============================================
+func (q *Queries) GetCharacterAttacks(ctx context.Context, characterID pgtype.UUID) ([]CharacterAttack, error) {
+	rows, err := q.db.Query(ctx, getCharacterAttacks, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterAttack{}
+	for rows.Next() {
+		var i CharacterAttack
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.SortOrder,
+			&i.Name,
+			&i.AttackBonus,
+			&i.Damage,
+			&i.DamageType,
+			&i.Range,
+			&i.Properties,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getCharacterByID = `-- name: GetCharacterByID :one
@@ -261,6 +830,344 @@ func (q *Queries) GetCharacterByID(ctx context.Context, id pgtype.UUID) (Charact
 	return i, err
 }
 
+const getCharacterCurrency = `-- name: GetCharacterCurrency :one
+
+SELECT id, character_id, copper, silver, electrum, gold, platinum FROM character_currency WHERE character_id = $1
+`
+
+// ============================================
+// Character Currency Queries
+// ============================================
+func (q *Queries) GetCharacterCurrency(ctx context.Context, characterID pgtype.UUID) (CharacterCurrency, error) {
+	row := q.db.QueryRow(ctx, getCharacterCurrency, characterID)
+	var i CharacterCurrency
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Copper,
+		&i.Silver,
+		&i.Electrum,
+		&i.Gold,
+		&i.Platinum,
+	)
+	return i, err
+}
+
+const getCharacterDetails = `-- name: GetCharacterDetails :one
+
+SELECT id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used FROM character_details WHERE character_id = $1
+`
+
+// ============================================
+// Character Details Queries
+// ============================================
+func (q *Queries) GetCharacterDetails(ctx context.Context, characterID pgtype.UUID) (CharacterDetail, error) {
+	row := q.db.QueryRow(ctx, getCharacterDetails, characterID)
+	var i CharacterDetail
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Age,
+		&i.Height,
+		&i.Weight,
+		&i.Eyes,
+		&i.Skin,
+		&i.Hair,
+		&i.FaithDeity,
+		&i.PersonalityTraits,
+		&i.Ideals,
+		&i.Bonds,
+		&i.Flaws,
+		&i.Backstory,
+		&i.AlliesOrganizations,
+		&i.Inspiration,
+		&i.DeathSaveSuccesses,
+		&i.DeathSaveFailures,
+		&i.HitDiceUsed,
+	)
+	return i, err
+}
+
+const getCharacterFeatures = `-- name: GetCharacterFeatures :many
+
+SELECT id, character_id, sort_order, name, source, source_type, description, created_at FROM character_features WHERE character_id = $1 ORDER BY sort_order
+`
+
+// ============================================
+// Character Features Queries
+// ============================================
+func (q *Queries) GetCharacterFeatures(ctx context.Context, characterID pgtype.UUID) ([]CharacterFeature, error) {
+	rows, err := q.db.Query(ctx, getCharacterFeatures, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterFeature{}
+	for rows.Next() {
+		var i CharacterFeature
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.SortOrder,
+			&i.Name,
+			&i.Source,
+			&i.SourceType,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharacterFeaturesByType = `-- name: GetCharacterFeaturesByType :many
+SELECT id, character_id, sort_order, name, source, source_type, description, created_at FROM character_features WHERE character_id = $1 AND source_type = $2 ORDER BY sort_order
+`
+
+type GetCharacterFeaturesByTypeParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	SourceType  pgtype.Text `json:"source_type"`
+}
+
+func (q *Queries) GetCharacterFeaturesByType(ctx context.Context, arg GetCharacterFeaturesByTypeParams) ([]CharacterFeature, error) {
+	rows, err := q.db.Query(ctx, getCharacterFeaturesByType, arg.CharacterID, arg.SourceType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterFeature{}
+	for rows.Next() {
+		var i CharacterFeature
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.SortOrder,
+			&i.Name,
+			&i.Source,
+			&i.SourceType,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharacterInventory = `-- name: GetCharacterInventory :many
+
+SELECT id, character_id, sort_order, name, quantity, weight, location, notes, is_equipped, created_at FROM character_inventory WHERE character_id = $1 ORDER BY sort_order
+`
+
+// ============================================
+// Character Inventory Queries
+// ============================================
+func (q *Queries) GetCharacterInventory(ctx context.Context, characterID pgtype.UUID) ([]CharacterInventory, error) {
+	rows, err := q.db.Query(ctx, getCharacterInventory, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterInventory{}
+	for rows.Next() {
+		var i CharacterInventory
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.SortOrder,
+			&i.Name,
+			&i.Quantity,
+			&i.Weight,
+			&i.Location,
+			&i.Notes,
+			&i.IsEquipped,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharacterMagicItems = `-- name: GetCharacterMagicItems :many
+
+SELECT id, character_id, sort_order, name, rarity, attunement_required, is_attuned, weight, description, created_at FROM character_magic_items WHERE character_id = $1 ORDER BY sort_order
+`
+
+// ============================================
+// Character Magic Items Queries
+// ============================================
+func (q *Queries) GetCharacterMagicItems(ctx context.Context, characterID pgtype.UUID) ([]CharacterMagicItem, error) {
+	rows, err := q.db.Query(ctx, getCharacterMagicItems, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterMagicItem{}
+	for rows.Next() {
+		var i CharacterMagicItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.SortOrder,
+			&i.Name,
+			&i.Rarity,
+			&i.AttunementRequired,
+			&i.IsAttuned,
+			&i.Weight,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharacterSpellcasting = `-- name: GetCharacterSpellcasting :one
+
+SELECT id, character_id, spellcasting_class, spellcasting_ability, spell_save_dc, spell_attack_bonus, slots_1_max, slots_1_used, slots_2_max, slots_2_used, slots_3_max, slots_3_used, slots_4_max, slots_4_used, slots_5_max, slots_5_used, slots_6_max, slots_6_used, slots_7_max, slots_7_used, slots_8_max, slots_8_used, slots_9_max, slots_9_used FROM character_spellcasting WHERE character_id = $1
+`
+
+// ============================================
+// Character Spellcasting Queries
+// ============================================
+func (q *Queries) GetCharacterSpellcasting(ctx context.Context, characterID pgtype.UUID) (CharacterSpellcasting, error) {
+	row := q.db.QueryRow(ctx, getCharacterSpellcasting, characterID)
+	var i CharacterSpellcasting
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SpellcastingClass,
+		&i.SpellcastingAbility,
+		&i.SpellSaveDc,
+		&i.SpellAttackBonus,
+		&i.Slots1Max,
+		&i.Slots1Used,
+		&i.Slots2Max,
+		&i.Slots2Used,
+		&i.Slots3Max,
+		&i.Slots3Used,
+		&i.Slots4Max,
+		&i.Slots4Used,
+		&i.Slots5Max,
+		&i.Slots5Used,
+		&i.Slots6Max,
+		&i.Slots6Used,
+		&i.Slots7Max,
+		&i.Slots7Used,
+		&i.Slots8Max,
+		&i.Slots8Used,
+		&i.Slots9Max,
+		&i.Slots9Used,
+	)
+	return i, err
+}
+
+const getCharacterSpells = `-- name: GetCharacterSpells :many
+
+SELECT id, character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source, created_at FROM character_spells WHERE character_id = $1 ORDER BY level, name
+`
+
+// ============================================
+// Character Spells Queries
+// ============================================
+func (q *Queries) GetCharacterSpells(ctx context.Context, characterID pgtype.UUID) ([]CharacterSpell, error) {
+	rows, err := q.db.Query(ctx, getCharacterSpells, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterSpell{}
+	for rows.Next() {
+		var i CharacterSpell
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.Name,
+			&i.Level,
+			&i.School,
+			&i.IsPrepared,
+			&i.IsRitual,
+			&i.CastingTime,
+			&i.Range,
+			&i.Components,
+			&i.Duration,
+			&i.Description,
+			&i.Source,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharacterSpellsByLevel = `-- name: GetCharacterSpellsByLevel :many
+SELECT id, character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source, created_at FROM character_spells WHERE character_id = $1 AND level = $2 ORDER BY name
+`
+
+type GetCharacterSpellsByLevelParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	Level       int32       `json:"level"`
+}
+
+func (q *Queries) GetCharacterSpellsByLevel(ctx context.Context, arg GetCharacterSpellsByLevelParams) ([]CharacterSpell, error) {
+	rows, err := q.db.Query(ctx, getCharacterSpellsByLevel, arg.CharacterID, arg.Level)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterSpell{}
+	for rows.Next() {
+		var i CharacterSpell
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.Name,
+			&i.Level,
+			&i.School,
+			&i.IsPrepared,
+			&i.IsRitual,
+			&i.CastingTime,
+			&i.Range,
+			&i.Components,
+			&i.Duration,
+			&i.Description,
+			&i.Source,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCharactersByUserID = `-- name: GetCharactersByUserID :many
 SELECT id, user_id, name, class, level, race, background, alignment, experience_points, strength, dexterity, constitution, intelligence, wisdom, charisma, max_hit_points, current_hit_points, temporary_hit_points, armor_class, speed, saving_throw_proficiencies, skill_proficiencies, equipment, features_traits, notes, created_at, updated_at FROM characters WHERE user_id = $1 ORDER BY updated_at DESC
 `
@@ -302,6 +1209,45 @@ func (q *Queries) GetCharactersByUserID(ctx context.Context, userID pgtype.UUID)
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPreparedSpells = `-- name: GetPreparedSpells :many
+SELECT id, character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source, created_at FROM character_spells WHERE character_id = $1 AND is_prepared = true ORDER BY level, name
+`
+
+func (q *Queries) GetPreparedSpells(ctx context.Context, characterID pgtype.UUID) ([]CharacterSpell, error) {
+	rows, err := q.db.Query(ctx, getPreparedSpells, characterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharacterSpell{}
+	for rows.Next() {
+		var i CharacterSpell
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.Name,
+			&i.Level,
+			&i.School,
+			&i.IsPrepared,
+			&i.IsRitual,
+			&i.CastingTime,
+			&i.Range,
+			&i.Components,
+			&i.Duration,
+			&i.Description,
+			&i.Source,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -363,6 +1309,58 @@ func (q *Queries) GetUserByPublicKey(ctx context.Context, publicKey pgtype.Text)
 		&i.PublicKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const toggleMagicItemAttunement = `-- name: ToggleMagicItemAttunement :one
+UPDATE character_magic_items SET is_attuned = NOT is_attuned
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, rarity, attunement_required, is_attuned, weight, description, created_at
+`
+
+func (q *Queries) ToggleMagicItemAttunement(ctx context.Context, id pgtype.UUID) (CharacterMagicItem, error) {
+	row := q.db.QueryRow(ctx, toggleMagicItemAttunement, id)
+	var i CharacterMagicItem
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Rarity,
+		&i.AttunementRequired,
+		&i.IsAttuned,
+		&i.Weight,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const toggleSpellPrepared = `-- name: ToggleSpellPrepared :one
+UPDATE character_spells SET is_prepared = NOT is_prepared
+WHERE id = $1
+RETURNING id, character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source, created_at
+`
+
+func (q *Queries) ToggleSpellPrepared(ctx context.Context, id pgtype.UUID) (CharacterSpell, error) {
+	row := q.db.QueryRow(ctx, toggleSpellPrepared, id)
+	var i CharacterSpell
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Name,
+		&i.Level,
+		&i.School,
+		&i.IsPrepared,
+		&i.IsRitual,
+		&i.CastingTime,
+		&i.Range,
+		&i.Components,
+		&i.Duration,
+		&i.Description,
+		&i.Source,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -430,6 +1428,154 @@ func (q *Queries) UpdateCharacterAbilities(ctx context.Context, arg UpdateCharac
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateCharacterAction = `-- name: UpdateCharacterAction :one
+UPDATE character_actions SET
+    name = $2,
+    action_type = $3,
+    source = $4,
+    description = $5,
+    uses_per = $6,
+    uses_max = $7,
+    uses_current = $8
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, action_type, source, description, uses_per, uses_max, uses_current, created_at
+`
+
+type UpdateCharacterActionParams struct {
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	ActionType  pgtype.Text `json:"action_type"`
+	Source      pgtype.Text `json:"source"`
+	Description pgtype.Text `json:"description"`
+	UsesPer     pgtype.Text `json:"uses_per"`
+	UsesMax     pgtype.Int4 `json:"uses_max"`
+	UsesCurrent pgtype.Int4 `json:"uses_current"`
+}
+
+func (q *Queries) UpdateCharacterAction(ctx context.Context, arg UpdateCharacterActionParams) (CharacterAction, error) {
+	row := q.db.QueryRow(ctx, updateCharacterAction,
+		arg.ID,
+		arg.Name,
+		arg.ActionType,
+		arg.Source,
+		arg.Description,
+		arg.UsesPer,
+		arg.UsesMax,
+		arg.UsesCurrent,
+	)
+	var i CharacterAction
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.ActionType,
+		&i.Source,
+		&i.Description,
+		&i.UsesPer,
+		&i.UsesMax,
+		&i.UsesCurrent,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterActionUses = `-- name: UpdateCharacterActionUses :one
+UPDATE character_actions SET uses_current = $2
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, action_type, source, description, uses_per, uses_max, uses_current, created_at
+`
+
+type UpdateCharacterActionUsesParams struct {
+	ID          pgtype.UUID `json:"id"`
+	UsesCurrent pgtype.Int4 `json:"uses_current"`
+}
+
+func (q *Queries) UpdateCharacterActionUses(ctx context.Context, arg UpdateCharacterActionUsesParams) (CharacterAction, error) {
+	row := q.db.QueryRow(ctx, updateCharacterActionUses, arg.ID, arg.UsesCurrent)
+	var i CharacterAction
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.ActionType,
+		&i.Source,
+		&i.Description,
+		&i.UsesPer,
+		&i.UsesMax,
+		&i.UsesCurrent,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterAttack = `-- name: UpdateCharacterAttack :one
+UPDATE character_attacks SET
+    name = $2,
+    attack_bonus = $3,
+    damage = $4,
+    damage_type = $5,
+    range = $6,
+    properties = $7,
+    notes = $8
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, attack_bonus, damage, damage_type, range, properties, notes, created_at
+`
+
+type UpdateCharacterAttackParams struct {
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	AttackBonus pgtype.Int4 `json:"attack_bonus"`
+	Damage      pgtype.Text `json:"damage"`
+	DamageType  pgtype.Text `json:"damage_type"`
+	Range       pgtype.Text `json:"range"`
+	Properties  pgtype.Text `json:"properties"`
+	Notes       pgtype.Text `json:"notes"`
+}
+
+func (q *Queries) UpdateCharacterAttack(ctx context.Context, arg UpdateCharacterAttackParams) (CharacterAttack, error) {
+	row := q.db.QueryRow(ctx, updateCharacterAttack,
+		arg.ID,
+		arg.Name,
+		arg.AttackBonus,
+		arg.Damage,
+		arg.DamageType,
+		arg.Range,
+		arg.Properties,
+		arg.Notes,
+	)
+	var i CharacterAttack
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.AttackBonus,
+		&i.Damage,
+		&i.DamageType,
+		&i.Range,
+		&i.Properties,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterAttackSortOrder = `-- name: UpdateCharacterAttackSortOrder :exec
+UPDATE character_attacks SET sort_order = $2 WHERE id = $1
+`
+
+type UpdateCharacterAttackSortOrderParams struct {
+	ID        pgtype.UUID `json:"id"`
+	SortOrder pgtype.Int4 `json:"sort_order"`
+}
+
+func (q *Queries) UpdateCharacterAttackSortOrder(ctx context.Context, arg UpdateCharacterAttackSortOrderParams) error {
+	_, err := q.db.Exec(ctx, updateCharacterAttackSortOrder, arg.ID, arg.SortOrder)
+	return err
 }
 
 const updateCharacterBasicInfo = `-- name: UpdateCharacterBasicInfo :one
@@ -562,6 +1708,126 @@ func (q *Queries) UpdateCharacterCombat(ctx context.Context, arg UpdateCharacter
 	return i, err
 }
 
+const updateCharacterCurrency = `-- name: UpdateCharacterCurrency :one
+UPDATE character_currency SET
+    copper = $2,
+    silver = $3,
+    electrum = $4,
+    gold = $5,
+    platinum = $6
+WHERE character_id = $1
+RETURNING id, character_id, copper, silver, electrum, gold, platinum
+`
+
+type UpdateCharacterCurrencyParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	Copper      pgtype.Int4 `json:"copper"`
+	Silver      pgtype.Int4 `json:"silver"`
+	Electrum    pgtype.Int4 `json:"electrum"`
+	Gold        pgtype.Int4 `json:"gold"`
+	Platinum    pgtype.Int4 `json:"platinum"`
+}
+
+func (q *Queries) UpdateCharacterCurrency(ctx context.Context, arg UpdateCharacterCurrencyParams) (CharacterCurrency, error) {
+	row := q.db.QueryRow(ctx, updateCharacterCurrency,
+		arg.CharacterID,
+		arg.Copper,
+		arg.Silver,
+		arg.Electrum,
+		arg.Gold,
+		arg.Platinum,
+	)
+	var i CharacterCurrency
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Copper,
+		&i.Silver,
+		&i.Electrum,
+		&i.Gold,
+		&i.Platinum,
+	)
+	return i, err
+}
+
+const updateCharacterDetails = `-- name: UpdateCharacterDetails :one
+UPDATE character_details SET
+    age = $2,
+    height = $3,
+    weight = $4,
+    eyes = $5,
+    skin = $6,
+    hair = $7,
+    faith_deity = $8,
+    personality_traits = $9,
+    ideals = $10,
+    bonds = $11,
+    flaws = $12,
+    backstory = $13,
+    allies_organizations = $14
+WHERE character_id = $1
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+`
+
+type UpdateCharacterDetailsParams struct {
+	CharacterID         pgtype.UUID `json:"character_id"`
+	Age                 pgtype.Text `json:"age"`
+	Height              pgtype.Text `json:"height"`
+	Weight              pgtype.Text `json:"weight"`
+	Eyes                pgtype.Text `json:"eyes"`
+	Skin                pgtype.Text `json:"skin"`
+	Hair                pgtype.Text `json:"hair"`
+	FaithDeity          pgtype.Text `json:"faith_deity"`
+	PersonalityTraits   pgtype.Text `json:"personality_traits"`
+	Ideals              pgtype.Text `json:"ideals"`
+	Bonds               pgtype.Text `json:"bonds"`
+	Flaws               pgtype.Text `json:"flaws"`
+	Backstory           pgtype.Text `json:"backstory"`
+	AlliesOrganizations pgtype.Text `json:"allies_organizations"`
+}
+
+func (q *Queries) UpdateCharacterDetails(ctx context.Context, arg UpdateCharacterDetailsParams) (CharacterDetail, error) {
+	row := q.db.QueryRow(ctx, updateCharacterDetails,
+		arg.CharacterID,
+		arg.Age,
+		arg.Height,
+		arg.Weight,
+		arg.Eyes,
+		arg.Skin,
+		arg.Hair,
+		arg.FaithDeity,
+		arg.PersonalityTraits,
+		arg.Ideals,
+		arg.Bonds,
+		arg.Flaws,
+		arg.Backstory,
+		arg.AlliesOrganizations,
+	)
+	var i CharacterDetail
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Age,
+		&i.Height,
+		&i.Weight,
+		&i.Eyes,
+		&i.Skin,
+		&i.Hair,
+		&i.FaithDeity,
+		&i.PersonalityTraits,
+		&i.Ideals,
+		&i.Bonds,
+		&i.Flaws,
+		&i.Backstory,
+		&i.AlliesOrganizations,
+		&i.Inspiration,
+		&i.DeathSaveSuccesses,
+		&i.DeathSaveFailures,
+		&i.HitDiceUsed,
+	)
+	return i, err
+}
+
 const updateCharacterEquipment = `-- name: UpdateCharacterEquipment :one
 UPDATE characters SET equipment = $2 WHERE id = $1 RETURNING id, user_id, name, class, level, race, background, alignment, experience_points, strength, dexterity, constitution, intelligence, wisdom, charisma, max_hit_points, current_hit_points, temporary_hit_points, armor_class, speed, saving_throw_proficiencies, skill_proficiencies, equipment, features_traits, notes, created_at, updated_at
 `
@@ -602,6 +1868,46 @@ func (q *Queries) UpdateCharacterEquipment(ctx context.Context, arg UpdateCharac
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterFeature = `-- name: UpdateCharacterFeature :one
+UPDATE character_features SET
+    name = $2,
+    source = $3,
+    source_type = $4,
+    description = $5
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, source, source_type, description, created_at
+`
+
+type UpdateCharacterFeatureParams struct {
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	Source      pgtype.Text `json:"source"`
+	SourceType  pgtype.Text `json:"source_type"`
+	Description pgtype.Text `json:"description"`
+}
+
+func (q *Queries) UpdateCharacterFeature(ctx context.Context, arg UpdateCharacterFeatureParams) (CharacterFeature, error) {
+	row := q.db.QueryRow(ctx, updateCharacterFeature,
+		arg.ID,
+		arg.Name,
+		arg.Source,
+		arg.SourceType,
+		arg.Description,
+	)
+	var i CharacterFeature
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Source,
+		&i.SourceType,
+		&i.Description,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -651,6 +1957,102 @@ func (q *Queries) UpdateCharacterHitPoints(ctx context.Context, arg UpdateCharac
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterInventoryItem = `-- name: UpdateCharacterInventoryItem :one
+UPDATE character_inventory SET
+    name = $2,
+    quantity = $3,
+    weight = $4,
+    location = $5,
+    notes = $6,
+    is_equipped = $7
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, quantity, weight, location, notes, is_equipped, created_at
+`
+
+type UpdateCharacterInventoryItemParams struct {
+	ID         pgtype.UUID    `json:"id"`
+	Name       string         `json:"name"`
+	Quantity   pgtype.Int4    `json:"quantity"`
+	Weight     pgtype.Numeric `json:"weight"`
+	Location   pgtype.Text    `json:"location"`
+	Notes      pgtype.Text    `json:"notes"`
+	IsEquipped pgtype.Bool    `json:"is_equipped"`
+}
+
+func (q *Queries) UpdateCharacterInventoryItem(ctx context.Context, arg UpdateCharacterInventoryItemParams) (CharacterInventory, error) {
+	row := q.db.QueryRow(ctx, updateCharacterInventoryItem,
+		arg.ID,
+		arg.Name,
+		arg.Quantity,
+		arg.Weight,
+		arg.Location,
+		arg.Notes,
+		arg.IsEquipped,
+	)
+	var i CharacterInventory
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Quantity,
+		&i.Weight,
+		&i.Location,
+		&i.Notes,
+		&i.IsEquipped,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterMagicItem = `-- name: UpdateCharacterMagicItem :one
+UPDATE character_magic_items SET
+    name = $2,
+    rarity = $3,
+    attunement_required = $4,
+    is_attuned = $5,
+    weight = $6,
+    description = $7
+WHERE id = $1
+RETURNING id, character_id, sort_order, name, rarity, attunement_required, is_attuned, weight, description, created_at
+`
+
+type UpdateCharacterMagicItemParams struct {
+	ID                 pgtype.UUID    `json:"id"`
+	Name               string         `json:"name"`
+	Rarity             pgtype.Text    `json:"rarity"`
+	AttunementRequired pgtype.Bool    `json:"attunement_required"`
+	IsAttuned          pgtype.Bool    `json:"is_attuned"`
+	Weight             pgtype.Numeric `json:"weight"`
+	Description        pgtype.Text    `json:"description"`
+}
+
+func (q *Queries) UpdateCharacterMagicItem(ctx context.Context, arg UpdateCharacterMagicItemParams) (CharacterMagicItem, error) {
+	row := q.db.QueryRow(ctx, updateCharacterMagicItem,
+		arg.ID,
+		arg.Name,
+		arg.Rarity,
+		arg.AttunementRequired,
+		arg.IsAttuned,
+		arg.Weight,
+		arg.Description,
+	)
+	var i CharacterMagicItem
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SortOrder,
+		&i.Name,
+		&i.Rarity,
+		&i.AttunementRequired,
+		&i.IsAttuned,
+		&i.Weight,
+		&i.Description,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -749,6 +2151,335 @@ func (q *Queries) UpdateCharacterProficiencies(ctx context.Context, arg UpdateCh
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterSpell = `-- name: UpdateCharacterSpell :one
+UPDATE character_spells SET
+    name = $2,
+    level = $3,
+    school = $4,
+    is_prepared = $5,
+    is_ritual = $6,
+    casting_time = $7,
+    range = $8,
+    components = $9,
+    duration = $10,
+    description = $11,
+    source = $12
+WHERE id = $1
+RETURNING id, character_id, name, level, school, is_prepared, is_ritual, casting_time, range, components, duration, description, source, created_at
+`
+
+type UpdateCharacterSpellParams struct {
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	Level       int32       `json:"level"`
+	School      pgtype.Text `json:"school"`
+	IsPrepared  pgtype.Bool `json:"is_prepared"`
+	IsRitual    pgtype.Bool `json:"is_ritual"`
+	CastingTime pgtype.Text `json:"casting_time"`
+	Range       pgtype.Text `json:"range"`
+	Components  pgtype.Text `json:"components"`
+	Duration    pgtype.Text `json:"duration"`
+	Description pgtype.Text `json:"description"`
+	Source      pgtype.Text `json:"source"`
+}
+
+func (q *Queries) UpdateCharacterSpell(ctx context.Context, arg UpdateCharacterSpellParams) (CharacterSpell, error) {
+	row := q.db.QueryRow(ctx, updateCharacterSpell,
+		arg.ID,
+		arg.Name,
+		arg.Level,
+		arg.School,
+		arg.IsPrepared,
+		arg.IsRitual,
+		arg.CastingTime,
+		arg.Range,
+		arg.Components,
+		arg.Duration,
+		arg.Description,
+		arg.Source,
+	)
+	var i CharacterSpell
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Name,
+		&i.Level,
+		&i.School,
+		&i.IsPrepared,
+		&i.IsRitual,
+		&i.CastingTime,
+		&i.Range,
+		&i.Components,
+		&i.Duration,
+		&i.Description,
+		&i.Source,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateCharacterSpellcasting = `-- name: UpdateCharacterSpellcasting :one
+UPDATE character_spellcasting SET
+    spellcasting_class = $2,
+    spellcasting_ability = $3,
+    spell_save_dc = $4,
+    spell_attack_bonus = $5
+WHERE character_id = $1
+RETURNING id, character_id, spellcasting_class, spellcasting_ability, spell_save_dc, spell_attack_bonus, slots_1_max, slots_1_used, slots_2_max, slots_2_used, slots_3_max, slots_3_used, slots_4_max, slots_4_used, slots_5_max, slots_5_used, slots_6_max, slots_6_used, slots_7_max, slots_7_used, slots_8_max, slots_8_used, slots_9_max, slots_9_used
+`
+
+type UpdateCharacterSpellcastingParams struct {
+	CharacterID         pgtype.UUID `json:"character_id"`
+	SpellcastingClass   pgtype.Text `json:"spellcasting_class"`
+	SpellcastingAbility pgtype.Text `json:"spellcasting_ability"`
+	SpellSaveDc         pgtype.Int4 `json:"spell_save_dc"`
+	SpellAttackBonus    pgtype.Int4 `json:"spell_attack_bonus"`
+}
+
+func (q *Queries) UpdateCharacterSpellcasting(ctx context.Context, arg UpdateCharacterSpellcastingParams) (CharacterSpellcasting, error) {
+	row := q.db.QueryRow(ctx, updateCharacterSpellcasting,
+		arg.CharacterID,
+		arg.SpellcastingClass,
+		arg.SpellcastingAbility,
+		arg.SpellSaveDc,
+		arg.SpellAttackBonus,
+	)
+	var i CharacterSpellcasting
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SpellcastingClass,
+		&i.SpellcastingAbility,
+		&i.SpellSaveDc,
+		&i.SpellAttackBonus,
+		&i.Slots1Max,
+		&i.Slots1Used,
+		&i.Slots2Max,
+		&i.Slots2Used,
+		&i.Slots3Max,
+		&i.Slots3Used,
+		&i.Slots4Max,
+		&i.Slots4Used,
+		&i.Slots5Max,
+		&i.Slots5Used,
+		&i.Slots6Max,
+		&i.Slots6Used,
+		&i.Slots7Max,
+		&i.Slots7Used,
+		&i.Slots8Max,
+		&i.Slots8Used,
+		&i.Slots9Max,
+		&i.Slots9Used,
+	)
+	return i, err
+}
+
+const updateDeathSaves = `-- name: UpdateDeathSaves :one
+UPDATE character_details SET
+    death_save_successes = $2,
+    death_save_failures = $3
+WHERE character_id = $1
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+`
+
+type UpdateDeathSavesParams struct {
+	CharacterID        pgtype.UUID `json:"character_id"`
+	DeathSaveSuccesses pgtype.Int4 `json:"death_save_successes"`
+	DeathSaveFailures  pgtype.Int4 `json:"death_save_failures"`
+}
+
+func (q *Queries) UpdateDeathSaves(ctx context.Context, arg UpdateDeathSavesParams) (CharacterDetail, error) {
+	row := q.db.QueryRow(ctx, updateDeathSaves, arg.CharacterID, arg.DeathSaveSuccesses, arg.DeathSaveFailures)
+	var i CharacterDetail
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Age,
+		&i.Height,
+		&i.Weight,
+		&i.Eyes,
+		&i.Skin,
+		&i.Hair,
+		&i.FaithDeity,
+		&i.PersonalityTraits,
+		&i.Ideals,
+		&i.Bonds,
+		&i.Flaws,
+		&i.Backstory,
+		&i.AlliesOrganizations,
+		&i.Inspiration,
+		&i.DeathSaveSuccesses,
+		&i.DeathSaveFailures,
+		&i.HitDiceUsed,
+	)
+	return i, err
+}
+
+const updateHitDiceUsed = `-- name: UpdateHitDiceUsed :one
+UPDATE character_details SET hit_dice_used = $2
+WHERE character_id = $1
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+`
+
+type UpdateHitDiceUsedParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	HitDiceUsed pgtype.Int4 `json:"hit_dice_used"`
+}
+
+func (q *Queries) UpdateHitDiceUsed(ctx context.Context, arg UpdateHitDiceUsedParams) (CharacterDetail, error) {
+	row := q.db.QueryRow(ctx, updateHitDiceUsed, arg.CharacterID, arg.HitDiceUsed)
+	var i CharacterDetail
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Age,
+		&i.Height,
+		&i.Weight,
+		&i.Eyes,
+		&i.Skin,
+		&i.Hair,
+		&i.FaithDeity,
+		&i.PersonalityTraits,
+		&i.Ideals,
+		&i.Bonds,
+		&i.Flaws,
+		&i.Backstory,
+		&i.AlliesOrganizations,
+		&i.Inspiration,
+		&i.DeathSaveSuccesses,
+		&i.DeathSaveFailures,
+		&i.HitDiceUsed,
+	)
+	return i, err
+}
+
+const updateInspiration = `-- name: UpdateInspiration :one
+UPDATE character_details SET inspiration = $2
+WHERE character_id = $1
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+`
+
+type UpdateInspirationParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	Inspiration pgtype.Bool `json:"inspiration"`
+}
+
+func (q *Queries) UpdateInspiration(ctx context.Context, arg UpdateInspirationParams) (CharacterDetail, error) {
+	row := q.db.QueryRow(ctx, updateInspiration, arg.CharacterID, arg.Inspiration)
+	var i CharacterDetail
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.Age,
+		&i.Height,
+		&i.Weight,
+		&i.Eyes,
+		&i.Skin,
+		&i.Hair,
+		&i.FaithDeity,
+		&i.PersonalityTraits,
+		&i.Ideals,
+		&i.Bonds,
+		&i.Flaws,
+		&i.Backstory,
+		&i.AlliesOrganizations,
+		&i.Inspiration,
+		&i.DeathSaveSuccesses,
+		&i.DeathSaveFailures,
+		&i.HitDiceUsed,
+	)
+	return i, err
+}
+
+const updateSpellSlots = `-- name: UpdateSpellSlots :one
+UPDATE character_spellcasting SET
+    slots_1_max = $2, slots_1_used = $3,
+    slots_2_max = $4, slots_2_used = $5,
+    slots_3_max = $6, slots_3_used = $7,
+    slots_4_max = $8, slots_4_used = $9,
+    slots_5_max = $10, slots_5_used = $11,
+    slots_6_max = $12, slots_6_used = $13,
+    slots_7_max = $14, slots_7_used = $15,
+    slots_8_max = $16, slots_8_used = $17,
+    slots_9_max = $18, slots_9_used = $19
+WHERE character_id = $1
+RETURNING id, character_id, spellcasting_class, spellcasting_ability, spell_save_dc, spell_attack_bonus, slots_1_max, slots_1_used, slots_2_max, slots_2_used, slots_3_max, slots_3_used, slots_4_max, slots_4_used, slots_5_max, slots_5_used, slots_6_max, slots_6_used, slots_7_max, slots_7_used, slots_8_max, slots_8_used, slots_9_max, slots_9_used
+`
+
+type UpdateSpellSlotsParams struct {
+	CharacterID pgtype.UUID `json:"character_id"`
+	Slots1Max   pgtype.Int4 `json:"slots_1_max"`
+	Slots1Used  pgtype.Int4 `json:"slots_1_used"`
+	Slots2Max   pgtype.Int4 `json:"slots_2_max"`
+	Slots2Used  pgtype.Int4 `json:"slots_2_used"`
+	Slots3Max   pgtype.Int4 `json:"slots_3_max"`
+	Slots3Used  pgtype.Int4 `json:"slots_3_used"`
+	Slots4Max   pgtype.Int4 `json:"slots_4_max"`
+	Slots4Used  pgtype.Int4 `json:"slots_4_used"`
+	Slots5Max   pgtype.Int4 `json:"slots_5_max"`
+	Slots5Used  pgtype.Int4 `json:"slots_5_used"`
+	Slots6Max   pgtype.Int4 `json:"slots_6_max"`
+	Slots6Used  pgtype.Int4 `json:"slots_6_used"`
+	Slots7Max   pgtype.Int4 `json:"slots_7_max"`
+	Slots7Used  pgtype.Int4 `json:"slots_7_used"`
+	Slots8Max   pgtype.Int4 `json:"slots_8_max"`
+	Slots8Used  pgtype.Int4 `json:"slots_8_used"`
+	Slots9Max   pgtype.Int4 `json:"slots_9_max"`
+	Slots9Used  pgtype.Int4 `json:"slots_9_used"`
+}
+
+func (q *Queries) UpdateSpellSlots(ctx context.Context, arg UpdateSpellSlotsParams) (CharacterSpellcasting, error) {
+	row := q.db.QueryRow(ctx, updateSpellSlots,
+		arg.CharacterID,
+		arg.Slots1Max,
+		arg.Slots1Used,
+		arg.Slots2Max,
+		arg.Slots2Used,
+		arg.Slots3Max,
+		arg.Slots3Used,
+		arg.Slots4Max,
+		arg.Slots4Used,
+		arg.Slots5Max,
+		arg.Slots5Used,
+		arg.Slots6Max,
+		arg.Slots6Used,
+		arg.Slots7Max,
+		arg.Slots7Used,
+		arg.Slots8Max,
+		arg.Slots8Used,
+		arg.Slots9Max,
+		arg.Slots9Used,
+	)
+	var i CharacterSpellcasting
+	err := row.Scan(
+		&i.ID,
+		&i.CharacterID,
+		&i.SpellcastingClass,
+		&i.SpellcastingAbility,
+		&i.SpellSaveDc,
+		&i.SpellAttackBonus,
+		&i.Slots1Max,
+		&i.Slots1Used,
+		&i.Slots2Max,
+		&i.Slots2Used,
+		&i.Slots3Max,
+		&i.Slots3Used,
+		&i.Slots4Max,
+		&i.Slots4Used,
+		&i.Slots5Max,
+		&i.Slots5Used,
+		&i.Slots6Max,
+		&i.Slots6Used,
+		&i.Slots7Max,
+		&i.Slots7Used,
+		&i.Slots8Max,
+		&i.Slots8Used,
+		&i.Slots9Max,
+		&i.Slots9Used,
 	)
 	return i, err
 }

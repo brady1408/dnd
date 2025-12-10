@@ -38,6 +38,147 @@ type Character struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CharacterAction struct {
+	ID          pgtype.UUID        `json:"id"`
+	CharacterID pgtype.UUID        `json:"character_id"`
+	SortOrder   pgtype.Int4        `json:"sort_order"`
+	Name        string             `json:"name"`
+	ActionType  pgtype.Text        `json:"action_type"`
+	Source      pgtype.Text        `json:"source"`
+	Description pgtype.Text        `json:"description"`
+	UsesPer     pgtype.Text        `json:"uses_per"`
+	UsesMax     pgtype.Int4        `json:"uses_max"`
+	UsesCurrent pgtype.Int4        `json:"uses_current"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterAttack struct {
+	ID          pgtype.UUID        `json:"id"`
+	CharacterID pgtype.UUID        `json:"character_id"`
+	SortOrder   pgtype.Int4        `json:"sort_order"`
+	Name        string             `json:"name"`
+	AttackBonus pgtype.Int4        `json:"attack_bonus"`
+	Damage      pgtype.Text        `json:"damage"`
+	DamageType  pgtype.Text        `json:"damage_type"`
+	Range       pgtype.Text        `json:"range"`
+	Properties  pgtype.Text        `json:"properties"`
+	Notes       pgtype.Text        `json:"notes"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterCurrency struct {
+	ID          pgtype.UUID `json:"id"`
+	CharacterID pgtype.UUID `json:"character_id"`
+	Copper      pgtype.Int4 `json:"copper"`
+	Silver      pgtype.Int4 `json:"silver"`
+	Electrum    pgtype.Int4 `json:"electrum"`
+	Gold        pgtype.Int4 `json:"gold"`
+	Platinum    pgtype.Int4 `json:"platinum"`
+}
+
+type CharacterDetail struct {
+	ID                  pgtype.UUID `json:"id"`
+	CharacterID         pgtype.UUID `json:"character_id"`
+	Age                 pgtype.Text `json:"age"`
+	Height              pgtype.Text `json:"height"`
+	Weight              pgtype.Text `json:"weight"`
+	Eyes                pgtype.Text `json:"eyes"`
+	Skin                pgtype.Text `json:"skin"`
+	Hair                pgtype.Text `json:"hair"`
+	FaithDeity          pgtype.Text `json:"faith_deity"`
+	PersonalityTraits   pgtype.Text `json:"personality_traits"`
+	Ideals              pgtype.Text `json:"ideals"`
+	Bonds               pgtype.Text `json:"bonds"`
+	Flaws               pgtype.Text `json:"flaws"`
+	Backstory           pgtype.Text `json:"backstory"`
+	AlliesOrganizations pgtype.Text `json:"allies_organizations"`
+	Inspiration         pgtype.Bool `json:"inspiration"`
+	DeathSaveSuccesses  pgtype.Int4 `json:"death_save_successes"`
+	DeathSaveFailures   pgtype.Int4 `json:"death_save_failures"`
+	HitDiceUsed         pgtype.Int4 `json:"hit_dice_used"`
+}
+
+type CharacterFeature struct {
+	ID          pgtype.UUID        `json:"id"`
+	CharacterID pgtype.UUID        `json:"character_id"`
+	SortOrder   pgtype.Int4        `json:"sort_order"`
+	Name        string             `json:"name"`
+	Source      pgtype.Text        `json:"source"`
+	SourceType  pgtype.Text        `json:"source_type"`
+	Description pgtype.Text        `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterInventory struct {
+	ID          pgtype.UUID        `json:"id"`
+	CharacterID pgtype.UUID        `json:"character_id"`
+	SortOrder   pgtype.Int4        `json:"sort_order"`
+	Name        string             `json:"name"`
+	Quantity    pgtype.Int4        `json:"quantity"`
+	Weight      pgtype.Numeric     `json:"weight"`
+	Location    pgtype.Text        `json:"location"`
+	Notes       pgtype.Text        `json:"notes"`
+	IsEquipped  pgtype.Bool        `json:"is_equipped"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterMagicItem struct {
+	ID                 pgtype.UUID        `json:"id"`
+	CharacterID        pgtype.UUID        `json:"character_id"`
+	SortOrder          pgtype.Int4        `json:"sort_order"`
+	Name               string             `json:"name"`
+	Rarity             pgtype.Text        `json:"rarity"`
+	AttunementRequired pgtype.Bool        `json:"attunement_required"`
+	IsAttuned          pgtype.Bool        `json:"is_attuned"`
+	Weight             pgtype.Numeric     `json:"weight"`
+	Description        pgtype.Text        `json:"description"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterSpell struct {
+	ID          pgtype.UUID        `json:"id"`
+	CharacterID pgtype.UUID        `json:"character_id"`
+	Name        string             `json:"name"`
+	Level       int32              `json:"level"`
+	School      pgtype.Text        `json:"school"`
+	IsPrepared  pgtype.Bool        `json:"is_prepared"`
+	IsRitual    pgtype.Bool        `json:"is_ritual"`
+	CastingTime pgtype.Text        `json:"casting_time"`
+	Range       pgtype.Text        `json:"range"`
+	Components  pgtype.Text        `json:"components"`
+	Duration    pgtype.Text        `json:"duration"`
+	Description pgtype.Text        `json:"description"`
+	Source      pgtype.Text        `json:"source"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterSpellcasting struct {
+	ID                  pgtype.UUID `json:"id"`
+	CharacterID         pgtype.UUID `json:"character_id"`
+	SpellcastingClass   pgtype.Text `json:"spellcasting_class"`
+	SpellcastingAbility pgtype.Text `json:"spellcasting_ability"`
+	SpellSaveDc         pgtype.Int4 `json:"spell_save_dc"`
+	SpellAttackBonus    pgtype.Int4 `json:"spell_attack_bonus"`
+	Slots1Max           pgtype.Int4 `json:"slots_1_max"`
+	Slots1Used          pgtype.Int4 `json:"slots_1_used"`
+	Slots2Max           pgtype.Int4 `json:"slots_2_max"`
+	Slots2Used          pgtype.Int4 `json:"slots_2_used"`
+	Slots3Max           pgtype.Int4 `json:"slots_3_max"`
+	Slots3Used          pgtype.Int4 `json:"slots_3_used"`
+	Slots4Max           pgtype.Int4 `json:"slots_4_max"`
+	Slots4Used          pgtype.Int4 `json:"slots_4_used"`
+	Slots5Max           pgtype.Int4 `json:"slots_5_max"`
+	Slots5Used          pgtype.Int4 `json:"slots_5_used"`
+	Slots6Max           pgtype.Int4 `json:"slots_6_max"`
+	Slots6Used          pgtype.Int4 `json:"slots_6_used"`
+	Slots7Max           pgtype.Int4 `json:"slots_7_max"`
+	Slots7Used          pgtype.Int4 `json:"slots_7_used"`
+	Slots8Max           pgtype.Int4 `json:"slots_8_max"`
+	Slots8Used          pgtype.Int4 `json:"slots_8_used"`
+	Slots9Max           pgtype.Int4 `json:"slots_9_max"`
+	Slots9Used          pgtype.Int4 `json:"slots_9_used"`
+}
+
 type User struct {
 	ID           pgtype.UUID        `json:"id"`
 	Email        pgtype.Text        `json:"email"`
