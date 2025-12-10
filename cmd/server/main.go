@@ -119,7 +119,10 @@ func teaHandler(queries *db.Queries) bubbletea.Handler {
 		}
 
 		m := NewMainModel(queries, publicKey, pty.Window.Width, pty.Window.Height)
-		return m, []tea.ProgramOption{tea.WithAltScreen()}
+		return m, []tea.ProgramOption{
+			tea.WithAltScreen(),
+			tea.WithEnvironment([]string{"TERM=" + pty.Term}),
+		}
 	}
 }
 
