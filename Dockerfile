@@ -1,10 +1,7 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.23-bookworm AS builder
 
 WORKDIR /app
-
-# Install git for fetching dependencies
-RUN apk add --no-cache git
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./
@@ -17,15 +14,14 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server
 
 # Runtime stage
-FROM alpine:3.19
+FROM ubuntu:24.04
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS and ncurses for terminal color support
-RUN apk add --no-cache ca-certificates ncurses-terminfo-base
-
-# Set terminfo path for color support
-ENV TERMINFO=/etc/terminfo
+# Install ca-certificates for HTTPS
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create directory for SSH host keys
 RUN mkdir -p /app/.ssh
