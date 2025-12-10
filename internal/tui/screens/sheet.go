@@ -31,7 +31,7 @@ type SheetScreen struct {
 	styles  *styles.Styles
 
 	mode       SheetMode
-	tab        int // 0=core, 1=combat, 2=spells, 3=inventory, 4=features, 5=background, 6=notes
+	tab        int // 0=core, 1=combat, 2=spells, 3=inventory, 4=notes
 	width      int
 	height     int
 
@@ -47,6 +47,7 @@ type SheetScreen struct {
 	actionsTable    *components.TableModel
 	inventoryTable  *components.TableModel
 	magicItemsTable *components.TableModel
+	spellsTable     *components.TableModel
 
 	// Combat tab focus: 0=stats panel, 1=attacks, 2=actions
 	combatFocus int
@@ -54,12 +55,17 @@ type SheetScreen struct {
 	// Inventory tab focus: 0=currency, 1=equipment, 2=magic items
 	inventoryFocus int
 
+	// Spells tab: which spell level is selected (0=cantrips, 1-9=spell levels)
+	spellLevelFilter int
+
 	// Cached data from DB
-	attacks    []db.CharacterAttack
-	actions    []db.CharacterAction
-	inventory  []db.CharacterInventory
-	magicItems []db.CharacterMagicItem
-	currency   *db.CharacterCurrency
+	attacks      []db.CharacterAttack
+	actions      []db.CharacterAction
+	inventory    []db.CharacterInventory
+	magicItems   []db.CharacterMagicItem
+	currency     *db.CharacterCurrency
+	spellcasting *db.CharacterSpellcasting
+	spells       []db.CharacterSpell
 }
 
 type CharacterUpdatedMsg struct {
@@ -137,6 +143,17 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	magicItemsTable.SetVisibleRows(5)
 	magicItemsTable.SetEmptyMessage("No magic items - press 'a' to add")
 
+	// Create spells table
+	spellsTable := components.NewTable([]components.TableColumn{
+		{Title: "P", Width: 2},
+		{Title: "Spell", Width: 20},
+		{Title: "School", Width: 10},
+		{Title: "Time", Width: 8},
+		{Title: "Range", Width: 8},
+	}, s)
+	spellsTable.SetVisibleRows(10)
+	spellsTable.SetEmptyMessage("No spells known")
+
 	sheet := &SheetScreen{
 		ctx:             ctx,
 		queries:         queries,
@@ -153,6 +170,7 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 		actionsTable:    actionsTable,
 		inventoryTable:  inventoryTable,
 		magicItemsTable: magicItemsTable,
+		spellsTable:     spellsTable,
 	}
 
 	// Populate tables
@@ -162,6 +180,8 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	sheet.refreshInventoryTable()
 	sheet.refreshMagicItemsTable()
 	sheet.refreshCurrency()
+	sheet.refreshSpellcasting()
+	sheet.refreshSpellsTable()
 
 	return sheet
 }
@@ -381,6 +401,70 @@ func (s *SheetScreen) refreshCurrency() {
 	s.currency = &currency
 }
 
+// refreshSpellcasting loads spellcasting info from DB
+func (s *SheetScreen) refreshSpellcasting() {
+	spellcasting, err := s.queries.GetCharacterSpellcasting(s.ctx, s.char.ID)
+	if err != nil {
+		s.spellcasting = nil
+		return
+	}
+	s.spellcasting = &spellcasting
+}
+
+// refreshSpellsTable loads spells from DB and populates the table
+func (s *SheetScreen) refreshSpellsTable() {
+	// Get spells filtered by level if filter is set
+	var spells []db.CharacterSpell
+	var err error
+
+	if s.spellLevelFilter >= 0 {
+		spells, err = s.queries.GetCharacterSpellsByLevel(s.ctx, db.GetCharacterSpellsByLevelParams{
+			CharacterID: s.char.ID,
+			Level:       int32(s.spellLevelFilter),
+		})
+	} else {
+		spells, err = s.queries.GetCharacterSpells(s.ctx, s.char.ID)
+	}
+
+	if err != nil {
+		s.spells = nil
+		s.spellsTable.SetRows(nil)
+		return
+	}
+
+	s.spells = spells
+	var rows []components.TableRow
+	for _, spell := range spells {
+		prepared := " "
+		if spell.IsPrepared.Valid && spell.IsPrepared.Bool {
+			prepared = "●"
+		}
+
+		school := ""
+		if spell.School.Valid {
+			school = spell.School.String
+		}
+
+		castingTime := ""
+		if spell.CastingTime.Valid {
+			castingTime = spell.CastingTime.String
+		}
+
+		spellRange := ""
+		if spell.Range.Valid {
+			spellRange = spell.Range.String
+		}
+
+		rows = append(rows, components.TableRow{
+			ID:    fmt.Sprintf("%x", spell.ID.Bytes),
+			Cells: []string{prepared, spell.Name, school, castingTime, spellRange},
+			Data:  spell,
+		})
+	}
+
+	s.spellsTable.SetRows(rows)
+}
+
 func (s *SheetScreen) Init() tea.Cmd {
 	return nil
 }
@@ -394,6 +478,8 @@ func (s *SheetScreen) SetCharacter(char db.Character) {
 	s.refreshInventoryTable()
 	s.refreshMagicItemsTable()
 	s.refreshCurrency()
+	s.refreshSpellcasting()
+	s.refreshSpellsTable()
 }
 
 func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -458,8 +544,28 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Handle Inventory tab navigation
+	// Handle Spells tab navigation
 	if s.tab == 2 {
+		switch msg.String() {
+		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
+			var cmd tea.Cmd
+			s.spellsTable, cmd = s.spellsTable.Update(msg)
+			return s, cmd
+		case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+			// Switch spell level filter (0=cantrips, 1-9=spell levels)
+			level := int(msg.String()[0] - '0')
+			if s.spellLevelFilter == level {
+				s.spellLevelFilter = -1 // Toggle off to show all
+			} else {
+				s.spellLevelFilter = level
+			}
+			s.refreshSpellsTable()
+			return s, nil
+		}
+	}
+
+	// Handle Inventory tab navigation
+	if s.tab == 3 {
 		switch msg.String() {
 		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
 			// Pass to focused table
@@ -485,10 +591,10 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "tab", "right", "l":
-		s.tab = (s.tab + 1) % 4
+		s.tab = (s.tab + 1) % 5
 		s.updateTableFocus()
 	case "shift+tab", "left", "h":
-		s.tab = (s.tab + 3) % 4
+		s.tab = (s.tab + 4) % 5
 		s.updateTableFocus()
 
 	case "e":
@@ -497,7 +603,7 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.hpInput.SetValue(fmt.Sprintf("%d", s.char.CurrentHitPoints))
 			s.hpInput.Focus()
 			return s, textinput.Blink
-		} else if s.tab == 3 { // Notes tab - edit notes
+		} else if s.tab == 4 { // Notes tab - edit notes
 			s.mode = ModeEditNotes
 			s.notesInput.SetValue(s.char.Notes)
 			s.notesInput.Focus()
@@ -505,7 +611,7 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "f":
-		if s.tab == 3 { // Notes tab - edit features & traits
+		if s.tab == 4 { // Notes tab - edit features & traits
 			s.mode = ModeEditFeatures
 			s.featuresInput.SetValue(s.char.FeaturesTraits)
 			s.featuresInput.Focus()
@@ -530,8 +636,9 @@ func (s *SheetScreen) updateTableFocus() {
 	s.skillsTable.SetFocused(s.tab == 0)
 	s.attacksTable.SetFocused(s.tab == 1 && s.combatFocus == 1)
 	s.actionsTable.SetFocused(s.tab == 1 && s.combatFocus == 2)
-	s.inventoryTable.SetFocused(s.tab == 2 && s.inventoryFocus == 1)
-	s.magicItemsTable.SetFocused(s.tab == 2 && s.inventoryFocus == 2)
+	s.spellsTable.SetFocused(s.tab == 2)
+	s.inventoryTable.SetFocused(s.tab == 3 && s.inventoryFocus == 1)
+	s.magicItemsTable.SetFocused(s.tab == 3 && s.inventoryFocus == 2)
 }
 
 func (s *SheetScreen) updateEditHP(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -652,7 +759,7 @@ func (s *SheetScreen) View() string {
 	b.WriteString("\n\n")
 
 	// Tab bar
-	tabs := []string{"Core", "Combat", "Inventory", "Notes"}
+	tabs := []string{"Core", "Combat", "Spells", "Inventory", "Notes"}
 	tabBar := ""
 	for i, t := range tabs {
 		if i == s.tab {
@@ -671,8 +778,10 @@ func (s *SheetScreen) View() string {
 	case 1:
 		b.WriteString(s.viewCombat())
 	case 2:
-		b.WriteString(s.viewInventory())
+		b.WriteString(s.viewSpells())
 	case 3:
+		b.WriteString(s.viewInventory())
+	case 4:
 		b.WriteString(s.viewNotes())
 	}
 
@@ -844,6 +953,108 @@ func (s *SheetScreen) viewCombat() string {
 		Render(b.String())
 }
 
+func (s *SheetScreen) viewSpells() string {
+	var b strings.Builder
+
+	// Spellcasting info header
+	if s.spellcasting != nil {
+		spellClass := "Unknown"
+		if s.spellcasting.SpellcastingClass.Valid {
+			spellClass = s.spellcasting.SpellcastingClass.String
+		}
+		ability := "—"
+		if s.spellcasting.SpellcastingAbility.Valid {
+			ability = strings.ToUpper(s.spellcasting.SpellcastingAbility.String[:3])
+		}
+		saveDC := "—"
+		if s.spellcasting.SpellSaveDc.Valid {
+			saveDC = fmt.Sprintf("%d", s.spellcasting.SpellSaveDc.Int32)
+		}
+		atkBonus := "—"
+		if s.spellcasting.SpellAttackBonus.Valid {
+			atkBonus = character.FormatModifierInt(int(s.spellcasting.SpellAttackBonus.Int32))
+		}
+
+		b.WriteString(fmt.Sprintf("%s | %s | Save DC: %s | Attack: %s\n\n",
+			s.styles.StatValue.Render(spellClass),
+			s.styles.Muted.Render(ability),
+			s.styles.StatValue.Render(saveDC),
+			s.styles.StatValue.Render(atkBonus),
+		))
+
+		// Spell slots display
+		b.WriteString(s.styles.Header.Render("Spell Slots"))
+		b.WriteString("\n\n")
+
+		slotData := []struct {
+			level int
+			max   int32
+			used  int32
+		}{
+			{1, s.spellcasting.Slots1Max.Int32, s.spellcasting.Slots1Used.Int32},
+			{2, s.spellcasting.Slots2Max.Int32, s.spellcasting.Slots2Used.Int32},
+			{3, s.spellcasting.Slots3Max.Int32, s.spellcasting.Slots3Used.Int32},
+			{4, s.spellcasting.Slots4Max.Int32, s.spellcasting.Slots4Used.Int32},
+			{5, s.spellcasting.Slots5Max.Int32, s.spellcasting.Slots5Used.Int32},
+			{6, s.spellcasting.Slots6Max.Int32, s.spellcasting.Slots6Used.Int32},
+			{7, s.spellcasting.Slots7Max.Int32, s.spellcasting.Slots7Used.Int32},
+			{8, s.spellcasting.Slots8Max.Int32, s.spellcasting.Slots8Used.Int32},
+			{9, s.spellcasting.Slots9Max.Int32, s.spellcasting.Slots9Used.Int32},
+		}
+
+		for _, slot := range slotData {
+			if slot.max > 0 {
+				remaining := slot.max - slot.used
+				slots := ""
+				for i := int32(0); i < slot.max; i++ {
+					if i < remaining {
+						slots += "[●]"
+					} else {
+						slots += "[ ]"
+					}
+				}
+				b.WriteString(fmt.Sprintf("  %dst: %s\n", slot.level, slots))
+			}
+		}
+	} else {
+		b.WriteString(s.styles.Muted.Render("No spellcasting ability"))
+		b.WriteString("\n")
+	}
+
+	// Spell level filter tabs
+	b.WriteString("\n")
+	levelNames := []string{"C", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	for i, name := range levelNames {
+		if s.spellLevelFilter == i {
+			b.WriteString(s.styles.FocusedButton.Render("[" + name + "]"))
+		} else if s.spellLevelFilter == -1 {
+			b.WriteString(s.styles.Button.Render(" " + name + " "))
+		} else {
+			b.WriteString(s.styles.Muted.Render(" " + name + " "))
+		}
+	}
+	if s.spellLevelFilter == -1 {
+		b.WriteString(" ")
+		b.WriteString(s.styles.FocusedButton.Render("[All]"))
+	}
+	b.WriteString("\n\n")
+
+	// Spells table
+	levelLabel := "All Spells"
+	if s.spellLevelFilter == 0 {
+		levelLabel = "Cantrips"
+	} else if s.spellLevelFilter > 0 {
+		levelLabel = fmt.Sprintf("Level %d Spells", s.spellLevelFilter)
+	}
+	b.WriteString(s.styles.Header.Render(levelLabel))
+	b.WriteString("\n\n")
+	b.WriteString(s.spellsTable.View())
+
+	return lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		Render(b.String())
+}
+
 func (s *SheetScreen) viewInventory() string {
 	var b strings.Builder
 
@@ -978,9 +1189,11 @@ func (s *SheetScreen) getHelp() string {
 			help += " • j/k: navigate skills"
 		case 1: // Combat
 			help += " • e: edit HP • 1: attacks • 2: actions • j/k: navigate"
-		case 2: // Inventory
+		case 2: // Spells
+			help += " • 0-9: filter by level • j/k: navigate"
+		case 3: // Inventory
 			help += " • 1: equipment • 2: magic items • j/k: navigate"
-		case 3: // Notes
+		case 4: // Notes
 			help += " • e: edit notes • f: edit features"
 		}
 		return help
