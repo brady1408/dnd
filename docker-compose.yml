@@ -1,0 +1,17 @@
+services:
+  dnd-server:
+    build: .
+    container_name: dnd-character-tracker
+    ports:
+      - "2222:2222"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@192.168.23.44:5434/dnd_character?sslmode=disable
+      - HOST=0.0.0.0
+      - PORT=2222
+    volumes:
+      # Persist SSH host keys so they don't change on restart
+      - dnd-ssh-keys:/app/.ssh
+    restart: unless-stopped
+
+volumes:
+  dnd-ssh-keys:
