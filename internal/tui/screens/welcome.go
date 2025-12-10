@@ -185,7 +185,14 @@ func (w *WelcomeScreen) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return w, nil
 	}
 
-	return w, nil
+	// Pass key to focused input
+	var cmd tea.Cmd
+	if w.focusIndex == 0 {
+		w.emailInput, cmd = w.emailInput.Update(msg)
+	} else if w.focusIndex == 1 {
+		w.passInput, cmd = w.passInput.Update(msg)
+	}
+	return w, cmd
 }
 
 func (w *WelcomeScreen) updateSSHRegister(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
