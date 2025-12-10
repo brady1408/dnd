@@ -24,6 +24,9 @@ WORKDIR /app
 # Install ca-certificates for HTTPS and ncurses for terminal color support
 RUN apk add --no-cache ca-certificates ncurses-terminfo-base
 
+# Set terminfo path for color support
+ENV TERMINFO=/etc/terminfo
+
 # Create directory for SSH host keys
 RUN mkdir -p /app/.ssh
 
