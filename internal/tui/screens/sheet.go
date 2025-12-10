@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type SheetMode int
@@ -31,7 +32,7 @@ type SheetScreen struct {
 	styles  *styles.Styles
 
 	mode       SheetMode
-	tab        int // 0=core, 1=combat, 2=spells, 3=inventory, 4=notes
+	tab        int // 0=core, 1=combat, 2=spells, 3=inventory, 4=features, 5=background, 6=notes
 	width      int
 	height     int
 
@@ -48,6 +49,7 @@ type SheetScreen struct {
 	inventoryTable  *components.TableModel
 	magicItemsTable *components.TableModel
 	spellsTable     *components.TableModel
+	featuresTable   *components.TableModel
 
 	// Combat tab focus: 0=stats panel, 1=attacks, 2=actions
 	combatFocus int
@@ -58,6 +60,9 @@ type SheetScreen struct {
 	// Spells tab: which spell level is selected (0=cantrips, 1-9=spell levels)
 	spellLevelFilter int
 
+	// Features tab: filter by source type (empty=all, "class", "race", "background", "feat")
+	featuresFilter string
+
 	// Cached data from DB
 	attacks      []db.CharacterAttack
 	actions      []db.CharacterAction
@@ -66,6 +71,8 @@ type SheetScreen struct {
 	currency     *db.CharacterCurrency
 	spellcasting *db.CharacterSpellcasting
 	spells       []db.CharacterSpell
+	features     []db.CharacterFeature
+	details      *db.CharacterDetail
 }
 
 type CharacterUpdatedMsg struct {
@@ -154,6 +161,15 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	spellsTable.SetVisibleRows(10)
 	spellsTable.SetEmptyMessage("No spells known")
 
+	// Create features table
+	featuresTable := components.NewTable([]components.TableColumn{
+		{Title: "Feature", Width: 25},
+		{Title: "Source", Width: 15},
+		{Title: "Type", Width: 12},
+	}, s)
+	featuresTable.SetVisibleRows(12)
+	featuresTable.SetEmptyMessage("No features")
+
 	sheet := &SheetScreen{
 		ctx:             ctx,
 		queries:         queries,
@@ -171,6 +187,7 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 		inventoryTable:  inventoryTable,
 		magicItemsTable: magicItemsTable,
 		spellsTable:     spellsTable,
+		featuresTable:   featuresTable,
 	}
 
 	// Populate tables
@@ -182,6 +199,8 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	sheet.refreshCurrency()
 	sheet.refreshSpellcasting()
 	sheet.refreshSpellsTable()
+	sheet.refreshFeaturesTable()
+	sheet.refreshDetails()
 
 	return sheet
 }
@@ -465,6 +484,59 @@ func (s *SheetScreen) refreshSpellsTable() {
 	s.spellsTable.SetRows(rows)
 }
 
+// refreshFeaturesTable loads features from DB and populates the table
+func (s *SheetScreen) refreshFeaturesTable() {
+	var features []db.CharacterFeature
+	var err error
+
+	if s.featuresFilter != "" {
+		features, err = s.queries.GetCharacterFeaturesByType(s.ctx, db.GetCharacterFeaturesByTypeParams{
+			CharacterID: s.char.ID,
+			SourceType:  pgtype.Text{String: s.featuresFilter, Valid: true},
+		})
+	} else {
+		features, err = s.queries.GetCharacterFeatures(s.ctx, s.char.ID)
+	}
+
+	if err != nil {
+		s.features = nil
+		s.featuresTable.SetRows(nil)
+		return
+	}
+
+	s.features = features
+	var rows []components.TableRow
+	for _, feat := range features {
+		source := ""
+		if feat.Source.Valid {
+			source = feat.Source.String
+		}
+
+		sourceType := ""
+		if feat.SourceType.Valid {
+			sourceType = feat.SourceType.String
+		}
+
+		rows = append(rows, components.TableRow{
+			ID:    fmt.Sprintf("%x", feat.ID.Bytes),
+			Cells: []string{feat.Name, source, sourceType},
+			Data:  feat,
+		})
+	}
+
+	s.featuresTable.SetRows(rows)
+}
+
+// refreshDetails loads character details from DB
+func (s *SheetScreen) refreshDetails() {
+	details, err := s.queries.GetCharacterDetails(s.ctx, s.char.ID)
+	if err != nil {
+		s.details = nil
+		return
+	}
+	s.details = &details
+}
+
 func (s *SheetScreen) Init() tea.Cmd {
 	return nil
 }
@@ -480,6 +552,8 @@ func (s *SheetScreen) SetCharacter(char db.Character) {
 	s.refreshCurrency()
 	s.refreshSpellcasting()
 	s.refreshSpellsTable()
+	s.refreshFeaturesTable()
+	s.refreshDetails()
 }
 
 func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -589,12 +663,54 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Handle Features tab navigation
+	if s.tab == 4 {
+		switch msg.String() {
+		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
+			var cmd tea.Cmd
+			s.featuresTable, cmd = s.featuresTable.Update(msg)
+			return s, cmd
+		case "1":
+			if s.featuresFilter == "class" {
+				s.featuresFilter = ""
+			} else {
+				s.featuresFilter = "class"
+			}
+			s.refreshFeaturesTable()
+			return s, nil
+		case "2":
+			if s.featuresFilter == "race" {
+				s.featuresFilter = ""
+			} else {
+				s.featuresFilter = "race"
+			}
+			s.refreshFeaturesTable()
+			return s, nil
+		case "3":
+			if s.featuresFilter == "background" {
+				s.featuresFilter = ""
+			} else {
+				s.featuresFilter = "background"
+			}
+			s.refreshFeaturesTable()
+			return s, nil
+		case "4":
+			if s.featuresFilter == "feat" {
+				s.featuresFilter = ""
+			} else {
+				s.featuresFilter = "feat"
+			}
+			s.refreshFeaturesTable()
+			return s, nil
+		}
+	}
+
 	switch msg.String() {
 	case "tab", "right", "l":
-		s.tab = (s.tab + 1) % 5
+		s.tab = (s.tab + 1) % 7
 		s.updateTableFocus()
 	case "shift+tab", "left", "h":
-		s.tab = (s.tab + 4) % 5
+		s.tab = (s.tab + 6) % 7
 		s.updateTableFocus()
 
 	case "e":
@@ -603,7 +719,7 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.hpInput.SetValue(fmt.Sprintf("%d", s.char.CurrentHitPoints))
 			s.hpInput.Focus()
 			return s, textinput.Blink
-		} else if s.tab == 4 { // Notes tab - edit notes
+		} else if s.tab == 6 { // Notes tab - edit notes
 			s.mode = ModeEditNotes
 			s.notesInput.SetValue(s.char.Notes)
 			s.notesInput.Focus()
@@ -611,7 +727,7 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "f":
-		if s.tab == 4 { // Notes tab - edit features & traits
+		if s.tab == 6 { // Notes tab - edit features & traits
 			s.mode = ModeEditFeatures
 			s.featuresInput.SetValue(s.char.FeaturesTraits)
 			s.featuresInput.Focus()
@@ -638,6 +754,7 @@ func (s *SheetScreen) updateTableFocus() {
 	s.actionsTable.SetFocused(s.tab == 1 && s.combatFocus == 2)
 	s.spellsTable.SetFocused(s.tab == 2)
 	s.inventoryTable.SetFocused(s.tab == 3 && s.inventoryFocus == 1)
+	s.featuresTable.SetFocused(s.tab == 4)
 	s.magicItemsTable.SetFocused(s.tab == 3 && s.inventoryFocus == 2)
 }
 
@@ -759,7 +876,7 @@ func (s *SheetScreen) View() string {
 	b.WriteString("\n\n")
 
 	// Tab bar
-	tabs := []string{"Core", "Combat", "Spells", "Inventory", "Notes"}
+	tabs := []string{"Core", "Combat", "Spells", "Inventory", "Features", "Background", "Notes"}
 	tabBar := ""
 	for i, t := range tabs {
 		if i == s.tab {
@@ -782,6 +899,10 @@ func (s *SheetScreen) View() string {
 	case 3:
 		b.WriteString(s.viewInventory())
 	case 4:
+		b.WriteString(s.viewFeatures())
+	case 5:
+		b.WriteString(s.viewBackground())
+	case 6:
 		b.WriteString(s.viewNotes())
 	}
 
@@ -1147,6 +1268,141 @@ func (s *SheetScreen) viewInventory() string {
 		Render(b.String())
 }
 
+func (s *SheetScreen) viewFeatures() string {
+	var b strings.Builder
+
+	// Filter tabs
+	filters := []struct {
+		key   string
+		label string
+	}{
+		{"", "All"},
+		{"class", "Class"},
+		{"race", "Race"},
+		{"background", "Background"},
+		{"feat", "Feats"},
+	}
+
+	for i, f := range filters {
+		label := f.label
+		if i > 0 {
+			label = fmt.Sprintf("%d:%s", i, f.label)
+		}
+		if s.featuresFilter == f.key {
+			b.WriteString(s.styles.FocusedButton.Render("[" + label + "]"))
+		} else {
+			b.WriteString(s.styles.Button.Render(" " + label + " "))
+		}
+	}
+	b.WriteString("\n\n")
+
+	// Features table
+	b.WriteString(s.styles.Header.Render("Features & Traits"))
+	b.WriteString("\n\n")
+	b.WriteString(s.featuresTable.View())
+
+	return lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		Render(b.String())
+}
+
+func (s *SheetScreen) viewBackground() string {
+	var b strings.Builder
+
+	// Character basic info
+	b.WriteString(s.styles.Header.Render("Character Info"))
+	b.WriteString("\n\n")
+
+	labelWidth := 12
+	b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Background:", s.styles.StatValue.Render(s.char.Background.String)))
+	if s.char.Alignment.Valid {
+		b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Alignment:", s.styles.StatValue.Render(s.char.Alignment.String)))
+	}
+
+	// Physical characteristics from details
+	if s.details != nil {
+		b.WriteString("\n")
+		b.WriteString(s.styles.Header.Render("Physical Traits"))
+		b.WriteString("\n\n")
+
+		if s.details.Age.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Age:", s.styles.StatValue.Render(s.details.Age.String)))
+		}
+		if s.details.Height.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Height:", s.styles.StatValue.Render(s.details.Height.String)))
+		}
+		if s.details.Weight.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Weight:", s.styles.StatValue.Render(s.details.Weight.String)))
+		}
+		if s.details.Eyes.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Eyes:", s.styles.StatValue.Render(s.details.Eyes.String)))
+		}
+		if s.details.Hair.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Hair:", s.styles.StatValue.Render(s.details.Hair.String)))
+		}
+		if s.details.Skin.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Skin:", s.styles.StatValue.Render(s.details.Skin.String)))
+		}
+		if s.details.FaithDeity.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Faith/Deity:", s.styles.StatValue.Render(s.details.FaithDeity.String)))
+		}
+
+		// Personality
+		b.WriteString("\n")
+		b.WriteString(s.styles.Header.Render("Personality"))
+		b.WriteString("\n\n")
+
+		if s.details.PersonalityTraits.Valid && s.details.PersonalityTraits.String != "" {
+			b.WriteString(s.styles.Muted.Render("  Traits: "))
+			b.WriteString(s.details.PersonalityTraits.String)
+			b.WriteString("\n")
+		}
+		if s.details.Ideals.Valid && s.details.Ideals.String != "" {
+			b.WriteString(s.styles.Muted.Render("  Ideals: "))
+			b.WriteString(s.details.Ideals.String)
+			b.WriteString("\n")
+		}
+		if s.details.Bonds.Valid && s.details.Bonds.String != "" {
+			b.WriteString(s.styles.Muted.Render("  Bonds: "))
+			b.WriteString(s.details.Bonds.String)
+			b.WriteString("\n")
+		}
+		if s.details.Flaws.Valid && s.details.Flaws.String != "" {
+			b.WriteString(s.styles.Muted.Render("  Flaws: "))
+			b.WriteString(s.details.Flaws.String)
+			b.WriteString("\n")
+		}
+
+		// Backstory
+		if s.details.Backstory.Valid && s.details.Backstory.String != "" {
+			b.WriteString("\n")
+			b.WriteString(s.styles.Header.Render("Backstory"))
+			b.WriteString("\n\n")
+			b.WriteString("  ")
+			b.WriteString(s.details.Backstory.String)
+			b.WriteString("\n")
+		}
+
+		// Allies
+		if s.details.AlliesOrganizations.Valid && s.details.AlliesOrganizations.String != "" {
+			b.WriteString("\n")
+			b.WriteString(s.styles.Header.Render("Allies & Organizations"))
+			b.WriteString("\n\n")
+			b.WriteString("  ")
+			b.WriteString(s.details.AlliesOrganizations.String)
+			b.WriteString("\n")
+		}
+	} else {
+		b.WriteString("\n")
+		b.WriteString(s.styles.Muted.Render("No detailed background information available"))
+		b.WriteString("\n")
+	}
+
+	return lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		Render(b.String())
+}
+
 func (s *SheetScreen) viewNotes() string {
 	var b strings.Builder
 
@@ -1193,7 +1449,11 @@ func (s *SheetScreen) getHelp() string {
 			help += " • 0-9: filter by level • j/k: navigate"
 		case 3: // Inventory
 			help += " • 1: equipment • 2: magic items • j/k: navigate"
-		case 4: // Notes
+		case 4: // Features
+			help += " • 1-4: filter type • j/k: navigate"
+		case 5: // Background
+			help += " • view only"
+		case 6: // Notes
 			help += " • e: edit notes • f: edit features"
 		}
 		return help
