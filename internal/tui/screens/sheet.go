@@ -31,7 +31,7 @@ type SheetScreen struct {
 	styles  *styles.Styles
 
 	mode       SheetMode
-	tab        int // 0=stats, 1=skills, 2=combat, 3=notes
+	tab        int // 0=core, 1=combat, 2=spells, 3=inventory, 4=features, 5=background, 6=notes
 	width      int
 	height     int
 
@@ -42,16 +42,24 @@ type SheetScreen struct {
 	editCursor    int
 
 	// Table components
-	skillsTable  *components.TableModel
-	attacksTable *components.TableModel
-	actionsTable *components.TableModel
+	skillsTable     *components.TableModel
+	attacksTable    *components.TableModel
+	actionsTable    *components.TableModel
+	inventoryTable  *components.TableModel
+	magicItemsTable *components.TableModel
 
 	// Combat tab focus: 0=stats panel, 1=attacks, 2=actions
 	combatFocus int
 
+	// Inventory tab focus: 0=currency, 1=equipment, 2=magic items
+	inventoryFocus int
+
 	// Cached data from DB
-	attacks []db.CharacterAttack
-	actions []db.CharacterAction
+	attacks    []db.CharacterAttack
+	actions    []db.CharacterAction
+	inventory  []db.CharacterInventory
+	magicItems []db.CharacterMagicItem
+	currency   *db.CharacterCurrency
 }
 
 type CharacterUpdatedMsg struct {
@@ -109,26 +117,51 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	actionsTable.SetVisibleRows(5)
 	actionsTable.SetEmptyMessage("No actions - press 'a' to add")
 
+	// Create inventory table
+	inventoryTable := components.NewTable([]components.TableColumn{
+		{Title: "Item", Width: 20},
+		{Title: "Qty", Width: 4},
+		{Title: "Wt", Width: 6},
+		{Title: "Location", Width: 12},
+		{Title: "Eq", Width: 3},
+	}, s)
+	inventoryTable.SetVisibleRows(8)
+	inventoryTable.SetEmptyMessage("No items - press 'a' to add")
+
+	// Create magic items table
+	magicItemsTable := components.NewTable([]components.TableColumn{
+		{Title: "Item", Width: 22},
+		{Title: "Rarity", Width: 10},
+		{Title: "Att", Width: 4},
+	}, s)
+	magicItemsTable.SetVisibleRows(5)
+	magicItemsTable.SetEmptyMessage("No magic items - press 'a' to add")
+
 	sheet := &SheetScreen{
-		ctx:           ctx,
-		queries:       queries,
-		char:          char,
-		styles:        s,
-		mode:          ModeView,
-		hpInput:       hpInput,
-		notesInput:    notesInput,
-		featuresInput: featuresInput,
-		width:         80,
-		height:        24,
-		skillsTable:   skillsTable,
-		attacksTable:  attacksTable,
-		actionsTable:  actionsTable,
+		ctx:             ctx,
+		queries:         queries,
+		char:            char,
+		styles:          s,
+		mode:            ModeView,
+		hpInput:         hpInput,
+		notesInput:      notesInput,
+		featuresInput:   featuresInput,
+		width:           80,
+		height:          24,
+		skillsTable:     skillsTable,
+		attacksTable:    attacksTable,
+		actionsTable:    actionsTable,
+		inventoryTable:  inventoryTable,
+		magicItemsTable: magicItemsTable,
 	}
 
 	// Populate tables
 	sheet.refreshSkillsTable()
 	sheet.refreshAttacksTable()
 	sheet.refreshActionsTable()
+	sheet.refreshInventoryTable()
+	sheet.refreshMagicItemsTable()
+	sheet.refreshCurrency()
 
 	return sheet
 }
@@ -262,6 +295,92 @@ func (s *SheetScreen) refreshActionsTable() {
 	s.actionsTable.SetRows(rows)
 }
 
+// refreshInventoryTable loads inventory from DB and populates the table
+func (s *SheetScreen) refreshInventoryTable() {
+	inventory, err := s.queries.GetCharacterInventory(s.ctx, s.char.ID)
+	if err != nil {
+		s.inventory = nil
+		s.inventoryTable.SetRows(nil)
+		return
+	}
+
+	s.inventory = inventory
+	var rows []components.TableRow
+	for _, item := range inventory {
+		qty := "1"
+		if item.Quantity.Valid {
+			qty = fmt.Sprintf("%d", item.Quantity.Int32)
+		}
+
+		weight := ""
+		if item.Weight.Valid && item.Weight.Int != nil {
+			weight = item.Weight.Int.String()
+		}
+
+		location := ""
+		if item.Location.Valid {
+			location = item.Location.String
+		}
+
+		equipped := " "
+		if item.IsEquipped.Valid && item.IsEquipped.Bool {
+			equipped = "●"
+		}
+
+		rows = append(rows, components.TableRow{
+			ID:    fmt.Sprintf("%x", item.ID.Bytes),
+			Cells: []string{item.Name, qty, weight, location, equipped},
+			Data:  item,
+		})
+	}
+
+	s.inventoryTable.SetRows(rows)
+}
+
+// refreshMagicItemsTable loads magic items from DB and populates the table
+func (s *SheetScreen) refreshMagicItemsTable() {
+	magicItems, err := s.queries.GetCharacterMagicItems(s.ctx, s.char.ID)
+	if err != nil {
+		s.magicItems = nil
+		s.magicItemsTable.SetRows(nil)
+		return
+	}
+
+	s.magicItems = magicItems
+	var rows []components.TableRow
+	for _, item := range magicItems {
+		rarity := ""
+		if item.Rarity.Valid {
+			rarity = item.Rarity.String
+		}
+
+		attuned := " "
+		if item.IsAttuned.Valid && item.IsAttuned.Bool {
+			attuned = "●"
+		} else if item.AttunementRequired.Valid && item.AttunementRequired.Bool {
+			attuned = "○"
+		}
+
+		rows = append(rows, components.TableRow{
+			ID:    fmt.Sprintf("%x", item.ID.Bytes),
+			Cells: []string{item.Name, rarity, attuned},
+			Data:  item,
+		})
+	}
+
+	s.magicItemsTable.SetRows(rows)
+}
+
+// refreshCurrency loads currency from DB
+func (s *SheetScreen) refreshCurrency() {
+	currency, err := s.queries.GetCharacterCurrency(s.ctx, s.char.ID)
+	if err != nil {
+		s.currency = nil
+		return
+	}
+	s.currency = &currency
+}
+
 func (s *SheetScreen) Init() tea.Cmd {
 	return nil
 }
@@ -272,6 +391,9 @@ func (s *SheetScreen) SetCharacter(char db.Character) {
 	s.refreshSkillsTable()
 	s.refreshAttacksTable()
 	s.refreshActionsTable()
+	s.refreshInventoryTable()
+	s.refreshMagicItemsTable()
+	s.refreshCurrency()
 }
 
 func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -301,9 +423,8 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle skills table navigation when on skills tab
-	if s.tab == 1 {
-		// Pass navigation keys to skills table
+	// Handle Core tab (skills table) navigation
+	if s.tab == 0 {
 		switch msg.String() {
 		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
 			var cmd tea.Cmd
@@ -312,8 +433,8 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Handle combat tab navigation
-	if s.tab == 2 {
+	// Handle Combat tab navigation
+	if s.tab == 1 {
 		switch msg.String() {
 		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
 			// Pass to focused table
@@ -337,6 +458,31 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Handle Inventory tab navigation
+	if s.tab == 2 {
+		switch msg.String() {
+		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
+			// Pass to focused table
+			if s.inventoryFocus == 1 {
+				var cmd tea.Cmd
+				s.inventoryTable, cmd = s.inventoryTable.Update(msg)
+				return s, cmd
+			} else if s.inventoryFocus == 2 {
+				var cmd tea.Cmd
+				s.magicItemsTable, cmd = s.magicItemsTable.Update(msg)
+				return s, cmd
+			}
+		case "1":
+			s.inventoryFocus = 1
+			s.updateTableFocus()
+			return s, nil
+		case "2":
+			s.inventoryFocus = 2
+			s.updateTableFocus()
+			return s, nil
+		}
+	}
+
 	switch msg.String() {
 	case "tab", "right", "l":
 		s.tab = (s.tab + 1) % 4
@@ -346,7 +492,7 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		s.updateTableFocus()
 
 	case "e":
-		if s.tab == 2 { // Combat tab - edit HP
+		if s.tab == 1 { // Combat tab - edit HP
 			s.mode = ModeEditHP
 			s.hpInput.SetValue(fmt.Sprintf("%d", s.char.CurrentHitPoints))
 			s.hpInput.Focus()
@@ -381,9 +527,11 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateTableFocus sets focus on the appropriate table based on current tab
 func (s *SheetScreen) updateTableFocus() {
-	s.skillsTable.SetFocused(s.tab == 1)
-	s.attacksTable.SetFocused(s.tab == 2 && s.combatFocus == 1)
-	s.actionsTable.SetFocused(s.tab == 2 && s.combatFocus == 2)
+	s.skillsTable.SetFocused(s.tab == 0)
+	s.attacksTable.SetFocused(s.tab == 1 && s.combatFocus == 1)
+	s.actionsTable.SetFocused(s.tab == 1 && s.combatFocus == 2)
+	s.inventoryTable.SetFocused(s.tab == 2 && s.inventoryFocus == 1)
+	s.magicItemsTable.SetFocused(s.tab == 2 && s.inventoryFocus == 2)
 }
 
 func (s *SheetScreen) updateEditHP(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -504,7 +652,7 @@ func (s *SheetScreen) View() string {
 	b.WriteString("\n\n")
 
 	// Tab bar
-	tabs := []string{"Stats", "Skills", "Combat", "Notes"}
+	tabs := []string{"Core", "Combat", "Inventory", "Notes"}
 	tabBar := ""
 	for i, t := range tabs {
 		if i == s.tab {
@@ -519,11 +667,11 @@ func (s *SheetScreen) View() string {
 	// Tab content
 	switch s.tab {
 	case 0:
-		b.WriteString(s.viewStats())
+		b.WriteString(s.viewCore())
 	case 1:
-		b.WriteString(s.viewSkills())
-	case 2:
 		b.WriteString(s.viewCombat())
+	case 2:
+		b.WriteString(s.viewInventory())
 	case 3:
 		b.WriteString(s.viewNotes())
 	}
@@ -537,7 +685,7 @@ func (s *SheetScreen) View() string {
 		b.String())
 }
 
-func (s *SheetScreen) viewStats() string {
+func (s *SheetScreen) viewCore() string {
 	var b strings.Builder
 
 	// Ability scores
@@ -609,23 +757,11 @@ func (s *SheetScreen) viewStats() string {
 	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(profBonus)))
 	b.WriteString("\n")
 
-	return b.String()
-}
-
-func (s *SheetScreen) viewSkills() string {
-	var b strings.Builder
-
+	// Skills section
+	b.WriteString("\n")
 	b.WriteString(s.styles.Header.Render("Skills"))
 	b.WriteString("\n\n")
-
-	// Use the table component
 	b.WriteString(s.skillsTable.View())
-
-	// Add help text for navigation
-	if s.skillsTable.IsFocused() {
-		b.WriteString("\n")
-		b.WriteString(s.styles.Help.Render("j/k: navigate • ●=proficient"))
-	}
 
 	return b.String()
 }
@@ -708,6 +844,98 @@ func (s *SheetScreen) viewCombat() string {
 		Render(b.String())
 }
 
+func (s *SheetScreen) viewInventory() string {
+	var b strings.Builder
+
+	// Currency panel
+	b.WriteString(s.styles.Header.Render("Currency"))
+	b.WriteString("\n\n")
+
+	if s.currency != nil {
+		cp := int32(0)
+		if s.currency.Copper.Valid {
+			cp = s.currency.Copper.Int32
+		}
+		sp := int32(0)
+		if s.currency.Silver.Valid {
+			sp = s.currency.Silver.Int32
+		}
+		ep := int32(0)
+		if s.currency.Electrum.Valid {
+			ep = s.currency.Electrum.Int32
+		}
+		gp := int32(0)
+		if s.currency.Gold.Valid {
+			gp = s.currency.Gold.Int32
+		}
+		pp := int32(0)
+		if s.currency.Platinum.Valid {
+			pp = s.currency.Platinum.Int32
+		}
+
+		b.WriteString(fmt.Sprintf("  CP: %s  SP: %s  EP: %s  GP: %s  PP: %s\n",
+			s.styles.StatValue.Render(fmt.Sprintf("%d", cp)),
+			s.styles.StatValue.Render(fmt.Sprintf("%d", sp)),
+			s.styles.StatValue.Render(fmt.Sprintf("%d", ep)),
+			s.styles.StatValue.Render(fmt.Sprintf("%d", gp)),
+			s.styles.StatValue.Render(fmt.Sprintf("%d", pp)),
+		))
+	} else {
+		b.WriteString("  CP: 0  SP: 0  EP: 0  GP: 0  PP: 0\n")
+	}
+
+	// Calculate total weight
+	totalWeight := 0.0
+	for _, item := range s.inventory {
+		if item.Weight.Valid && item.Weight.Int != nil {
+			qty := int32(1)
+			if item.Quantity.Valid {
+				qty = item.Quantity.Int32
+			}
+			// Convert numeric weight to float using Float64Value
+			f64Val, err := item.Weight.Float64Value()
+			if err == nil && f64Val.Valid {
+				totalWeight += f64Val.Float64 * float64(qty)
+			}
+		}
+	}
+	for _, item := range s.magicItems {
+		if item.Weight.Valid && item.Weight.Int != nil {
+			f64Val, err := item.Weight.Float64Value()
+			if err == nil && f64Val.Valid {
+				totalWeight += f64Val.Float64
+			}
+		}
+	}
+
+	b.WriteString(fmt.Sprintf("  Total Weight: %s lbs\n",
+		s.styles.StatValue.Render(fmt.Sprintf("%.1f", totalWeight))))
+
+	// Equipment table
+	b.WriteString("\n")
+	equipHeader := "Equipment"
+	if s.inventoryFocus == 1 {
+		equipHeader = "▶ Equipment"
+	}
+	b.WriteString(s.styles.Header.Render(equipHeader))
+	b.WriteString("\n\n")
+	b.WriteString(s.inventoryTable.View())
+
+	// Magic Items table
+	b.WriteString("\n")
+	magicHeader := "Magic Items"
+	if s.inventoryFocus == 2 {
+		magicHeader = "▶ Magic Items"
+	}
+	b.WriteString(s.styles.Header.Render(magicHeader))
+	b.WriteString("\n\n")
+	b.WriteString(s.magicItemsTable.View())
+
+	return lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		Render(b.String())
+}
+
 func (s *SheetScreen) viewNotes() string {
 	var b strings.Builder
 
@@ -745,11 +973,14 @@ func (s *SheetScreen) getHelp() string {
 		return "ctrl+s: save • esc: cancel"
 	default:
 		help := "tab/←→: switch tabs • q/esc: back"
-		if s.tab == 1 {
+		switch s.tab {
+		case 0: // Core
 			help += " • j/k: navigate skills"
-		} else if s.tab == 2 {
+		case 1: // Combat
 			help += " • e: edit HP • 1: attacks • 2: actions • j/k: navigate"
-		} else if s.tab == 3 {
+		case 2: // Inventory
+			help += " • 1: equipment • 2: magic items • j/k: navigate"
+		case 3: // Notes
 			help += " • e: edit notes • f: edit features"
 		}
 		return help
