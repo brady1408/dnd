@@ -42,7 +42,16 @@ type SheetScreen struct {
 	editCursor    int
 
 	// Table components
-	skillsTable *components.TableModel
+	skillsTable  *components.TableModel
+	attacksTable *components.TableModel
+	actionsTable *components.TableModel
+
+	// Combat tab focus: 0=stats panel, 1=attacks, 2=actions
+	combatFocus int
+
+	// Cached data from DB
+	attacks []db.CharacterAttack
+	actions []db.CharacterAction
 }
 
 type CharacterUpdatedMsg struct {
@@ -79,6 +88,27 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	skillsTable.SetVisibleRows(12)
 	skillsTable.SetEmptyMessage("No skills available")
 
+	// Create attacks table
+	attacksTable := components.NewTable([]components.TableColumn{
+		{Title: "Weapon", Width: 15},
+		{Title: "Atk", Width: 5},
+		{Title: "Damage", Width: 12},
+		{Title: "Type", Width: 10},
+		{Title: "Range", Width: 8},
+	}, s)
+	attacksTable.SetVisibleRows(5)
+	attacksTable.SetEmptyMessage("No attacks - press 'a' to add")
+
+	// Create actions table
+	actionsTable := components.NewTable([]components.TableColumn{
+		{Title: "Action", Width: 18},
+		{Title: "Type", Width: 8},
+		{Title: "Uses", Width: 8},
+		{Title: "Source", Width: 12},
+	}, s)
+	actionsTable.SetVisibleRows(5)
+	actionsTable.SetEmptyMessage("No actions - press 'a' to add")
+
 	sheet := &SheetScreen{
 		ctx:           ctx,
 		queries:       queries,
@@ -91,10 +121,14 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 		width:         80,
 		height:        24,
 		skillsTable:   skillsTable,
+		attacksTable:  attacksTable,
+		actionsTable:  actionsTable,
 	}
 
-	// Populate skills table
+	// Populate tables
 	sheet.refreshSkillsTable()
+	sheet.refreshAttacksTable()
+	sheet.refreshActionsTable()
 
 	return sheet
 }
@@ -141,6 +175,93 @@ func (s *SheetScreen) refreshSkillsTable() {
 	s.skillsTable.SetRows(rows)
 }
 
+// refreshAttacksTable loads attacks from DB and populates the table
+func (s *SheetScreen) refreshAttacksTable() {
+	attacks, err := s.queries.GetCharacterAttacks(s.ctx, s.char.ID)
+	if err != nil {
+		s.attacks = nil
+		s.attacksTable.SetRows(nil)
+		return
+	}
+
+	s.attacks = attacks
+	var rows []components.TableRow
+	for _, atk := range attacks {
+		atkBonus := ""
+		if atk.AttackBonus.Valid {
+			atkBonus = character.FormatModifierInt(int(atk.AttackBonus.Int32))
+		}
+
+		damage := ""
+		if atk.Damage.Valid {
+			damage = atk.Damage.String
+		}
+
+		damageType := ""
+		if atk.DamageType.Valid {
+			damageType = atk.DamageType.String
+		}
+
+		atkRange := ""
+		if atk.Range.Valid {
+			atkRange = atk.Range.String
+		}
+
+		rows = append(rows, components.TableRow{
+			ID:    fmt.Sprintf("%x", atk.ID.Bytes),
+			Cells: []string{atk.Name, atkBonus, damage, damageType, atkRange},
+			Data:  atk,
+		})
+	}
+
+	s.attacksTable.SetRows(rows)
+}
+
+// refreshActionsTable loads actions from DB and populates the table
+func (s *SheetScreen) refreshActionsTable() {
+	actions, err := s.queries.GetCharacterActions(s.ctx, s.char.ID)
+	if err != nil {
+		s.actions = nil
+		s.actionsTable.SetRows(nil)
+		return
+	}
+
+	s.actions = actions
+	var rows []components.TableRow
+	for _, act := range actions {
+		actionType := "action"
+		if act.ActionType.Valid {
+			actionType = act.ActionType.String
+		}
+
+		uses := ""
+		if act.UsesMax.Valid && act.UsesMax.Int32 > 0 {
+			current := int32(0)
+			if act.UsesCurrent.Valid {
+				current = act.UsesCurrent.Int32
+			}
+			usesPer := ""
+			if act.UsesPer.Valid {
+				usesPer = act.UsesPer.String
+			}
+			uses = fmt.Sprintf("%d/%d %s", current, act.UsesMax.Int32, usesPer)
+		}
+
+		source := ""
+		if act.Source.Valid {
+			source = act.Source.String
+		}
+
+		rows = append(rows, components.TableRow{
+			ID:    fmt.Sprintf("%x", act.ID.Bytes),
+			Cells: []string{act.Name, actionType, uses, source},
+			Data:  act,
+		})
+	}
+
+	s.actionsTable.SetRows(rows)
+}
+
 func (s *SheetScreen) Init() tea.Cmd {
 	return nil
 }
@@ -149,6 +270,8 @@ func (s *SheetScreen) Init() tea.Cmd {
 func (s *SheetScreen) SetCharacter(char db.Character) {
 	s.char = char
 	s.refreshSkillsTable()
+	s.refreshAttacksTable()
+	s.refreshActionsTable()
 }
 
 func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -186,6 +309,31 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			s.skillsTable, cmd = s.skillsTable.Update(msg)
 			return s, cmd
+		}
+	}
+
+	// Handle combat tab navigation
+	if s.tab == 2 {
+		switch msg.String() {
+		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
+			// Pass to focused table
+			if s.combatFocus == 1 {
+				var cmd tea.Cmd
+				s.attacksTable, cmd = s.attacksTable.Update(msg)
+				return s, cmd
+			} else if s.combatFocus == 2 {
+				var cmd tea.Cmd
+				s.actionsTable, cmd = s.actionsTable.Update(msg)
+				return s, cmd
+			}
+		case "1":
+			s.combatFocus = 1
+			s.updateTableFocus()
+			return s, nil
+		case "2":
+			s.combatFocus = 2
+			s.updateTableFocus()
+			return s, nil
 		}
 	}
 
@@ -234,6 +382,8 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // updateTableFocus sets focus on the appropriate table based on current tab
 func (s *SheetScreen) updateTableFocus() {
 	s.skillsTable.SetFocused(s.tab == 1)
+	s.attacksTable.SetFocused(s.tab == 2 && s.combatFocus == 1)
+	s.actionsTable.SetFocused(s.tab == 2 && s.combatFocus == 2)
 }
 
 func (s *SheetScreen) updateEditHP(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -483,9 +633,6 @@ func (s *SheetScreen) viewSkills() string {
 func (s *SheetScreen) viewCombat() string {
 	var b strings.Builder
 
-	b.WriteString(s.styles.Header.Render("Combat"))
-	b.WriteString("\n\n")
-
 	// HP display
 	hpPct := float64(s.char.CurrentHitPoints) / float64(s.char.MaxHitPoints)
 	hpStyle := s.styles.HPCurrent
@@ -497,6 +644,10 @@ func (s *SheetScreen) viewCombat() string {
 
 	// Right-align labels to align on the colon
 	labelWidth := 14
+
+	// Combat stats panel
+	b.WriteString(s.styles.Header.Render("Combat Stats"))
+	b.WriteString("\n\n")
 
 	if s.mode == ModeEditHP {
 		b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Hit Points:"))
@@ -519,13 +670,11 @@ func (s *SheetScreen) viewCombat() string {
 
 	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Armor Class:"))
 	b.WriteString(s.styles.StatValue.Render(fmt.Sprintf("%d", s.char.ArmorClass)))
-	b.WriteString("\n")
-
-	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Initiative:"))
+	b.WriteString("    ")
+	b.WriteString(fmt.Sprintf("%*s ", 10, "Initiative:"))
 	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(initiative)))
-	b.WriteString("\n")
-
-	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Speed:"))
+	b.WriteString("    ")
+	b.WriteString(fmt.Sprintf("%*s ", 6, "Speed:"))
 	b.WriteString(s.styles.StatValue.Render(fmt.Sprintf("%d", s.char.Speed)))
 	b.WriteString(" ft\n")
 
@@ -533,22 +682,25 @@ func (s *SheetScreen) viewCombat() string {
 	hitDie := character.ClassHitDice[s.char.Class]
 	b.WriteString(fmt.Sprintf("%*s %dd%d\n", labelWidth, "Hit Dice:", s.char.Level, hitDie))
 
+	// Attacks section
 	b.WriteString("\n")
-	b.WriteString(s.styles.Header.Render("Quick Rolls"))
+	attacksHeader := "Attacks"
+	if s.combatFocus == 1 {
+		attacksHeader = "▶ Attacks"
+	}
+	b.WriteString(s.styles.Header.Render(attacksHeader))
 	b.WriteString("\n\n")
+	b.WriteString(s.attacksTable.View())
 
-	// Attack bonus examples
-	strMod := character.AbilityModifier(int(s.char.Strength))
-	dexMod := character.AbilityModifier(int(s.char.Dexterity))
-	profBonus := character.ProficiencyBonus(int(s.char.Level))
-
-	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Melee Attack:"))
-	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(strMod + profBonus)))
-	b.WriteString(" (STR + Prof)\n")
-
-	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Ranged Attack:"))
-	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(dexMod + profBonus)))
-	b.WriteString(" (DEX + Prof)\n")
+	// Actions section
+	b.WriteString("\n")
+	actionsHeader := "Actions"
+	if s.combatFocus == 2 {
+		actionsHeader = "▶ Actions"
+	}
+	b.WriteString(s.styles.Header.Render(actionsHeader))
+	b.WriteString("\n\n")
+	b.WriteString(s.actionsTable.View())
 
 	// Wrap in a left-aligned box so the colon alignment works
 	return lipgloss.NewStyle().
@@ -593,8 +745,10 @@ func (s *SheetScreen) getHelp() string {
 		return "ctrl+s: save • esc: cancel"
 	default:
 		help := "tab/←→: switch tabs • q/esc: back"
-		if s.tab == 2 {
-			help += " • e: edit HP"
+		if s.tab == 1 {
+			help += " • j/k: navigate skills"
+		} else if s.tab == 2 {
+			help += " • e: edit HP • 1: attacks • 2: actions • j/k: navigate"
 		} else if s.tab == 3 {
 			help += " • e: edit notes • f: edit features"
 		}
