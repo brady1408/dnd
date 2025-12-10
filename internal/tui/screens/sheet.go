@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/brady1408/dnd/internal/character"
 	"github.com/brady1408/dnd/internal/db"
@@ -23,6 +24,7 @@ const (
 	ModeEditHP
 	ModeEditNotes
 	ModeEditFeatures
+	ModeHelp
 )
 
 type SheetScreen struct {
@@ -73,11 +75,22 @@ type SheetScreen struct {
 	spells       []db.CharacterSpell
 	features     []db.CharacterFeature
 	details      *db.CharacterDetail
+
+	// Status message for user feedback
+	statusMsg   string
+	statusIsErr bool
 }
 
 type CharacterUpdatedMsg struct {
 	Character db.Character
 }
+
+type StatusMsg struct {
+	Message string
+	IsError bool
+}
+
+type ClearStatusMsg struct{}
 
 func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character, s *styles.Styles) *SheetScreen {
 	hpInput := textinput.New()
@@ -561,6 +574,16 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		s.width = msg.Width
 		s.height = msg.Height
+	case StatusMsg:
+		s.statusMsg = msg.Message
+		s.statusIsErr = msg.IsError
+		return s, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return ClearStatusMsg{}
+		})
+	case ClearStatusMsg:
+		s.statusMsg = ""
+		s.statusIsErr = false
+		return s, nil
 	}
 
 	// Handle mode-specific updates
@@ -577,6 +600,15 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s.updateEditNotes(msg)
 	case ModeEditFeatures:
 		return s.updateEditFeatures(msg)
+	case ModeHelp:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			// Any key closes help
+			switch keyMsg.String() {
+			case "?", "esc", "q", "enter", " ":
+				s.mode = ModeView
+				return s, nil
+			}
+		}
 	}
 
 	return s, nil
@@ -740,6 +772,10 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Display would need a message system
 		_ = roll
 
+	case "?":
+		s.mode = ModeHelp
+		return s, nil
+
 	case "esc", "q":
 		return s, func() tea.Msg { return NavigateBackMsg{} }
 	}
@@ -808,7 +844,7 @@ func (s *SheetScreen) updateHP(hp int32) tea.Cmd {
 			TemporaryHitPoints: s.char.TemporaryHitPoints,
 		})
 		if err != nil {
-			return nil
+			return StatusMsg{Message: "Failed to update HP", IsError: true}
 		}
 		s.char = updated
 		s.mode = ModeView
@@ -824,7 +860,7 @@ func (s *SheetScreen) updateNotes(notes string) tea.Cmd {
 			Notes:          notes,
 		})
 		if err != nil {
-			return nil
+			return StatusMsg{Message: "Failed to save notes", IsError: true}
 		}
 		s.char = updated
 		s.mode = ModeView
@@ -858,7 +894,7 @@ func (s *SheetScreen) updateFeatures(features string) tea.Cmd {
 			Notes:          s.char.Notes,
 		})
 		if err != nil {
-			return nil
+			return StatusMsg{Message: "Failed to save features", IsError: true}
 		}
 		s.char = updated
 		s.mode = ModeView
@@ -906,13 +942,30 @@ func (s *SheetScreen) View() string {
 		b.WriteString(s.viewNotes())
 	}
 
+	// Status message (if any)
+	if s.statusMsg != "" {
+		b.WriteString("\n\n")
+		if s.statusIsErr {
+			b.WriteString(s.styles.ErrorText.Render("✗ " + s.statusMsg))
+		} else {
+			b.WriteString(s.styles.SuccessText.Render("✓ " + s.statusMsg))
+		}
+	}
+
 	// Help
 	b.WriteString("\n\n")
 	b.WriteString(s.styles.Help.Render(s.getHelp()))
 
-	return lipgloss.Place(s.width, s.height,
+	content := lipgloss.Place(s.width, s.height,
 		lipgloss.Center, lipgloss.Center,
 		b.String())
+
+	// Overlay help if in help mode
+	if s.mode == ModeHelp {
+		return s.renderHelpOverlay(content)
+	}
+
+	return content
 }
 
 func (s *SheetScreen) viewCore() string {
@@ -1456,6 +1509,69 @@ func (s *SheetScreen) getHelp() string {
 		case 6: // Notes
 			help += " • e: edit notes • f: edit features"
 		}
-		return help
+		return help + " • ?: help"
 	}
+}
+
+// renderHelpOverlay renders the help overlay on top of the content
+func (s *SheetScreen) renderHelpOverlay(background string) string {
+	// Build the help content
+	var b strings.Builder
+
+	b.WriteString(s.styles.Title.Render("Keyboard Shortcuts"))
+	b.WriteString("\n\n")
+
+	// Global shortcuts
+	b.WriteString(s.styles.Header.Render("Global"))
+	b.WriteString("\n")
+	b.WriteString("  tab / ← →     Switch tabs\n")
+	b.WriteString("  q / esc       Back to character list\n")
+	b.WriteString("  ?             Show this help\n")
+	b.WriteString("\n")
+
+	// Navigation
+	b.WriteString(s.styles.Header.Render("Navigation"))
+	b.WriteString("\n")
+	b.WriteString("  j / ↓         Move down in list\n")
+	b.WriteString("  k / ↑         Move up in list\n")
+	b.WriteString("  g / Home      Go to first item\n")
+	b.WriteString("  G / End       Go to last item\n")
+	b.WriteString("  PgUp/PgDn     Page up/down\n")
+	b.WriteString("\n")
+
+	// Tab-specific
+	b.WriteString(s.styles.Header.Render("Tab-Specific"))
+	b.WriteString("\n")
+	b.WriteString("  Combat:    e: edit HP, 1/2: switch tables\n")
+	b.WriteString("  Spells:    0-9: filter by level\n")
+	b.WriteString("  Inventory: 1/2: switch tables\n")
+	b.WriteString("  Features:  1-4: filter by type\n")
+	b.WriteString("  Notes:     e: edit notes, f: edit features\n")
+	b.WriteString("\n")
+
+	// Editing
+	b.WriteString(s.styles.Header.Render("Editing"))
+	b.WriteString("\n")
+	b.WriteString("  Ctrl+S        Save changes\n")
+	b.WriteString("  Esc           Cancel editing\n")
+	b.WriteString("\n\n")
+
+	b.WriteString(s.styles.Muted.Render("Press ? or Esc to close"))
+
+	// Style the help box
+	helpBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7C3AED")).
+		Padding(1, 2).
+		Width(50).
+		Render(b.String())
+
+	// Center the help box
+	centered := lipgloss.Place(s.width, s.height,
+		lipgloss.Center, lipgloss.Center,
+		helpBox)
+
+	// Dim the background (simple approach - just return centered overlay)
+	// For a true dimmed effect, we'd need to process each character
+	return centered
 }
