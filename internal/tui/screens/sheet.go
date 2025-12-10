@@ -27,6 +27,7 @@ type SheetScreen struct {
 	ctx     context.Context
 	queries *db.Queries
 	char    db.Character
+	styles  *styles.Styles
 
 	mode       SheetMode
 	tab        int // 0=stats, 1=skills, 2=combat, 3=notes
@@ -44,7 +45,7 @@ type CharacterUpdatedMsg struct {
 	Character db.Character
 }
 
-func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character) *SheetScreen {
+func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character, s *styles.Styles) *SheetScreen {
 	hpInput := textinput.New()
 	hpInput.Placeholder = "HP"
 	hpInput.Width = 10
@@ -68,6 +69,7 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character)
 		ctx:           ctx,
 		queries:       queries,
 		char:          char,
+		styles:        s,
 		mode:          ModeView,
 		hpInput:       hpInput,
 		notesInput:    notesInput,
@@ -267,7 +269,7 @@ func (s *SheetScreen) View() string {
 	// Header with character name
 	header := fmt.Sprintf("%s - Level %d %s %s",
 		s.char.Name, s.char.Level, s.char.Race, s.char.Class)
-	b.WriteString(styles.Title.Render(header))
+	b.WriteString(s.styles.Title.Render(header))
 	b.WriteString("\n\n")
 
 	// Tab bar
@@ -275,9 +277,9 @@ func (s *SheetScreen) View() string {
 	tabBar := ""
 	for i, t := range tabs {
 		if i == s.tab {
-			tabBar += styles.FocusedButton.Render(" " + t + " ")
+			tabBar += s.styles.FocusedButton.Render(" " + t + " ")
 		} else {
-			tabBar += styles.Button.Render(" " + t + " ")
+			tabBar += s.styles.Button.Render(" " + t + " ")
 		}
 	}
 	b.WriteString(tabBar)
@@ -297,7 +299,7 @@ func (s *SheetScreen) View() string {
 
 	// Help
 	b.WriteString("\n\n")
-	b.WriteString(styles.Help.Render(s.getHelp()))
+	b.WriteString(s.styles.Help.Render(s.getHelp()))
 
 	return lipgloss.Place(s.width, s.height,
 		lipgloss.Center, lipgloss.Center,
@@ -322,7 +324,7 @@ func (s *SheetScreen) viewStats() string {
 
 	profBonus := character.ProficiencyBonus(int(s.char.Level))
 
-	b.WriteString(styles.Header.Render("Ability Scores"))
+	b.WriteString(s.styles.Header.Render("Ability Scores"))
 	b.WriteString("\n\n")
 
 	// Use fixed-width columns for alignment
@@ -337,16 +339,16 @@ func (s *SheetScreen) viewStats() string {
 		paddedScore := fmt.Sprintf("%*d", scoreWidth, a.score)
 		paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
 
-		b.WriteString(styles.Muted.Render(paddedName))
+		b.WriteString(s.styles.Muted.Render(paddedName))
 		b.WriteString("  ")
-		b.WriteString(styles.StatValue.Render(paddedScore))
+		b.WriteString(s.styles.StatValue.Render(paddedScore))
 		b.WriteString("  ")
-		b.WriteString(styles.StatMod.Render(paddedMod))
+		b.WriteString(s.styles.StatMod.Render(paddedMod))
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styles.Header.Render("Saving Throws"))
+	b.WriteString(s.styles.Header.Render("Saving Throws"))
 	b.WriteString("\n\n")
 
 	for _, a := range abilities {
@@ -360,24 +362,20 @@ func (s *SheetScreen) viewStats() string {
 
 		mod := character.SavingThrow(int(a.score), int(s.char.Level), proficient)
 		profMark := "  "
-		style := styles.NotProficient
+		style := s.styles.NotProficient
 		if proficient {
-			profMark := "● "
-			style = styles.Proficient
-			paddedName := fmt.Sprintf("%-*s", labelWidth, a.name)
-			paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
-			b.WriteString(style.Render(profMark + paddedName + "  " + paddedMod))
-		} else {
-			paddedName := fmt.Sprintf("%-*s", labelWidth, a.name)
-			paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
-			b.WriteString(style.Render(profMark + paddedName + "  " + paddedMod))
+			profMark = "● "
+			style = s.styles.Proficient
 		}
+		paddedName := fmt.Sprintf("%-*s", labelWidth, a.name)
+		paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
+		b.WriteString(style.Render(profMark + paddedName + "  " + paddedMod))
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
 	b.WriteString("Proficiency Bonus: ")
-	b.WriteString(styles.StatValue.Render(character.FormatModifierInt(profBonus)))
+	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(profBonus)))
 	b.WriteString("\n")
 
 	return b.String()
@@ -386,7 +384,7 @@ func (s *SheetScreen) viewStats() string {
 func (s *SheetScreen) viewSkills() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Header.Render("Skills"))
+	b.WriteString(s.styles.Header.Render("Skills"))
 	b.WriteString("\n\n")
 
 	abilities := map[string]int32{
@@ -415,10 +413,10 @@ func (s *SheetScreen) viewSkills() string {
 
 		mod := character.SkillBonus(int(abilityScore), int(s.char.Level), proficient)
 		profMark := "  "
-		style := styles.NotProficient
+		style := s.styles.NotProficient
 		if proficient {
 			profMark = "● "
-			style = styles.Proficient
+			style = s.styles.Proficient
 		}
 
 		// Abbreviate ability name
@@ -437,16 +435,16 @@ func (s *SheetScreen) viewSkills() string {
 func (s *SheetScreen) viewCombat() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Header.Render("Combat"))
+	b.WriteString(s.styles.Header.Render("Combat"))
 	b.WriteString("\n\n")
 
 	// HP display
 	hpPct := float64(s.char.CurrentHitPoints) / float64(s.char.MaxHitPoints)
-	hpStyle := styles.HPCurrent
+	hpStyle := s.styles.HPCurrent
 	if hpPct < 0.25 {
-		hpStyle = styles.HPCritical
+		hpStyle = s.styles.HPCritical
 	} else if hpPct < 0.5 {
-		hpStyle = styles.HPLow
+		hpStyle = s.styles.HPLow
 	}
 
 	// Right-align labels to align on the colon
@@ -454,13 +452,13 @@ func (s *SheetScreen) viewCombat() string {
 
 	if s.mode == ModeEditHP {
 		b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Hit Points:"))
-		b.WriteString(styles.FocusedInput.Render(s.hpInput.View()))
+		b.WriteString(s.styles.FocusedInput.Render(s.hpInput.View()))
 		b.WriteString(fmt.Sprintf(" / %d", s.char.MaxHitPoints))
 	} else {
 		b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Hit Points:"))
 		b.WriteString(hpStyle.Render(fmt.Sprintf("%d", s.char.CurrentHitPoints)))
 		b.WriteString(" / ")
-		b.WriteString(styles.HPMax.Render(fmt.Sprintf("%d", s.char.MaxHitPoints)))
+		b.WriteString(s.styles.HPMax.Render(fmt.Sprintf("%d", s.char.MaxHitPoints)))
 	}
 
 	if s.char.TemporaryHitPoints > 0 {
@@ -472,15 +470,15 @@ func (s *SheetScreen) viewCombat() string {
 	initiative := character.Initiative(int(s.char.Dexterity))
 
 	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Armor Class:"))
-	b.WriteString(styles.StatValue.Render(fmt.Sprintf("%d", s.char.ArmorClass)))
+	b.WriteString(s.styles.StatValue.Render(fmt.Sprintf("%d", s.char.ArmorClass)))
 	b.WriteString("\n")
 
 	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Initiative:"))
-	b.WriteString(styles.StatValue.Render(character.FormatModifierInt(initiative)))
+	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(initiative)))
 	b.WriteString("\n")
 
 	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Speed:"))
-	b.WriteString(styles.StatValue.Render(fmt.Sprintf("%d", s.char.Speed)))
+	b.WriteString(s.styles.StatValue.Render(fmt.Sprintf("%d", s.char.Speed)))
 	b.WriteString(" ft\n")
 
 	// Hit dice
@@ -488,7 +486,7 @@ func (s *SheetScreen) viewCombat() string {
 	b.WriteString(fmt.Sprintf("%*s %dd%d\n", labelWidth, "Hit Dice:", s.char.Level, hitDie))
 
 	b.WriteString("\n")
-	b.WriteString(styles.Header.Render("Quick Rolls"))
+	b.WriteString(s.styles.Header.Render("Quick Rolls"))
 	b.WriteString("\n\n")
 
 	// Attack bonus examples
@@ -497,11 +495,11 @@ func (s *SheetScreen) viewCombat() string {
 	profBonus := character.ProficiencyBonus(int(s.char.Level))
 
 	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Melee Attack:"))
-	b.WriteString(styles.StatValue.Render(character.FormatModifierInt(strMod + profBonus)))
+	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(strMod + profBonus)))
 	b.WriteString(" (STR + Prof)\n")
 
 	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Ranged Attack:"))
-	b.WriteString(styles.StatValue.Render(character.FormatModifierInt(dexMod + profBonus)))
+	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(dexMod + profBonus)))
 	b.WriteString(" (DEX + Prof)\n")
 
 	// Wrap in a left-aligned box so the colon alignment works
@@ -513,27 +511,27 @@ func (s *SheetScreen) viewCombat() string {
 func (s *SheetScreen) viewNotes() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Header.Render("Features & Traits"))
+	b.WriteString(s.styles.Header.Render("Features & Traits"))
 	b.WriteString("\n\n")
 
 	if s.mode == ModeEditFeatures {
-		b.WriteString(styles.FocusedInput.Render(s.featuresInput.View()))
+		b.WriteString(s.styles.FocusedInput.Render(s.featuresInput.View()))
 	} else if s.char.FeaturesTraits != "" {
 		b.WriteString(s.char.FeaturesTraits)
 	} else {
-		b.WriteString(styles.Muted.Render("No features or traits recorded."))
+		b.WriteString(s.styles.Muted.Render("No features or traits recorded."))
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(styles.Header.Render("Notes"))
+	b.WriteString(s.styles.Header.Render("Notes"))
 	b.WriteString("\n\n")
 
 	if s.mode == ModeEditNotes {
-		b.WriteString(styles.FocusedInput.Render(s.notesInput.View()))
+		b.WriteString(s.styles.FocusedInput.Render(s.notesInput.View()))
 	} else if s.char.Notes != "" {
 		b.WriteString(s.char.Notes)
 	} else {
-		b.WriteString(styles.Muted.Render("No notes recorded."))
+		b.WriteString(s.styles.Muted.Render("No notes recorded."))
 	}
 
 	return b.String()

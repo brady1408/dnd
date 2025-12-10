@@ -17,6 +17,7 @@ type HomeScreen struct {
 	queries    *db.Queries
 	user       *db.User
 	characters []db.Character
+	styles     *styles.Styles
 
 	selectedIndex int
 	width         int
@@ -33,11 +34,12 @@ type CharacterDeletedMsg struct {
 }
 type LogoutMsg struct{}
 
-func NewHomeScreen(ctx context.Context, queries *db.Queries, user *db.User) *HomeScreen {
+func NewHomeScreen(ctx context.Context, queries *db.Queries, user *db.User, s *styles.Styles) *HomeScreen {
 	return &HomeScreen{
 		ctx:     ctx,
 		queries: queries,
 		user:    user,
+		styles:  s,
 		width:   80,
 		height:  24,
 	}
@@ -150,7 +152,7 @@ func (h *HomeScreen) View() string {
 	var b strings.Builder
 
 	// Header
-	b.WriteString(styles.Logo.Render(styles.LogoSmall))
+	b.WriteString(h.styles.Logo.Render(styles.LogoSmall))
 	b.WriteString("\n")
 
 	// User info
@@ -158,24 +160,24 @@ func (h *HomeScreen) View() string {
 	if h.user != nil && h.user.Email.Valid {
 		userInfo = "Logged in as: " + h.user.Email.String
 	}
-	b.WriteString(styles.Subtitle.Render(userInfo))
+	b.WriteString(h.styles.Subtitle.Render(userInfo))
 	b.WriteString("\n\n")
 
 	// Title
-	b.WriteString(styles.Title.Render("Your Characters"))
+	b.WriteString(h.styles.Title.Render("Your Characters"))
 	b.WriteString("\n\n")
 
 	// Character list
 	if len(h.characters) == 0 {
-		b.WriteString(styles.Muted.Render("No characters yet. Create your first adventurer!"))
+		b.WriteString(h.styles.Muted.Render("No characters yet. Create your first adventurer!"))
 		b.WriteString("\n\n")
 	} else {
 		for i, char := range h.characters {
 			cursor := "  "
-			style := styles.Unselected
+			style := h.styles.Unselected
 			if i == h.selectedIndex {
 				cursor = "> "
-				style = styles.Selected
+				style = h.styles.Selected
 			}
 
 			line := fmt.Sprintf("%s%s - Level %d %s %s",
@@ -194,12 +196,12 @@ func (h *HomeScreen) View() string {
 
 	// Create new character option
 	createCursor := "  "
-	createStyle := styles.Unselected
+	createStyle := h.styles.Unselected
 	if h.selectedIndex == len(h.characters) {
 		createCursor = "> "
-		createStyle = styles.Selected
+		createStyle = h.styles.Selected
 	}
-	b.WriteString(styles.Cursor.Render(createCursor))
+	b.WriteString(h.styles.Cursor.Render(createCursor))
 	b.WriteString(createStyle.Render("+ Create New Character"))
 	b.WriteString("\n")
 
@@ -207,7 +209,7 @@ func (h *HomeScreen) View() string {
 	if h.confirmDelete && h.selectedIndex < len(h.characters) {
 		b.WriteString("\n")
 		char := h.characters[h.selectedIndex]
-		b.WriteString(styles.WarningText.Render(fmt.Sprintf(
+		b.WriteString(h.styles.WarningText.Render(fmt.Sprintf(
 			"Delete %s? This cannot be undone. (y/n)",
 			char.Name,
 		)))
@@ -216,9 +218,9 @@ func (h *HomeScreen) View() string {
 	// Help
 	b.WriteString("\n\n")
 	if h.confirmDelete {
-		b.WriteString(styles.Help.Render("y: confirm delete • n: cancel"))
+		b.WriteString(h.styles.Help.Render("y: confirm delete • n: cancel"))
 	} else {
-		b.WriteString(styles.Help.Render("↑/↓: navigate • enter: select • d: delete • l: logout • q: quit"))
+		b.WriteString(h.styles.Help.Render("↑/↓: navigate • enter: select • d: delete • l: logout • q: quit"))
 	}
 
 	return lipgloss.Place(h.width, h.height,

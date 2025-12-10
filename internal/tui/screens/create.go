@@ -33,6 +33,7 @@ type CreateScreen struct {
 	ctx     context.Context
 	queries *db.Queries
 	userID  pgtype.UUID
+	styles  *styles.Styles
 
 	step       CreateStep
 	width      int
@@ -69,7 +70,7 @@ type CharacterCreatedMsg struct {
 
 type NavigateBackMsg struct{}
 
-func NewCreateScreen(ctx context.Context, queries *db.Queries, userID pgtype.UUID) *CreateScreen {
+func NewCreateScreen(ctx context.Context, queries *db.Queries, userID pgtype.UUID, s *styles.Styles) *CreateScreen {
 	nameInput := textinput.New()
 	nameInput.Placeholder = "Character Name"
 	nameInput.CharLimit = 100
@@ -85,6 +86,7 @@ func NewCreateScreen(ctx context.Context, queries *db.Queries, userID pgtype.UUI
 		ctx:            ctx,
 		queries:        queries,
 		userID:         userID,
+		styles:         s,
 		step:           StepBasicInfo,
 		nameInput:      nameInput,
 		backgroundInput: bgInput,
@@ -487,11 +489,11 @@ func (c *CreateScreen) View() string {
 	progress := ""
 	for i, s := range steps {
 		if i == stepIdx {
-			progress += styles.Selected.Render("[" + s + "]")
+			progress += c.styles.Selected.Render("[" + s + "]")
 		} else if i < stepIdx {
-			progress += styles.SuccessText.Render("✓" + s)
+			progress += c.styles.SuccessText.Render("✓" + s)
 		} else {
-			progress += styles.Muted.Render(" " + s + " ")
+			progress += c.styles.Muted.Render(" " + s + " ")
 		}
 		if i < len(steps)-1 {
 			progress += " → "
@@ -523,12 +525,12 @@ func (c *CreateScreen) View() string {
 	// Error
 	if c.err != "" {
 		b.WriteString("\n")
-		b.WriteString(styles.ErrorText.Render("Error: " + c.err))
+		b.WriteString(c.styles.ErrorText.Render("Error: " + c.err))
 	}
 
 	// Help
 	b.WriteString("\n\n")
-	b.WriteString(styles.Help.Render(c.getHelp()))
+	b.WriteString(c.styles.Help.Render(c.getHelp()))
 
 	return lipgloss.Place(c.width, c.height,
 		lipgloss.Center, lipgloss.Center,
@@ -556,11 +558,11 @@ func (c *CreateScreen) currentStepIndex() int {
 func (c *CreateScreen) viewBasicInfo() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Create Your Character"))
+	b.WriteString(c.styles.Title.Render("Create Your Character"))
 	b.WriteString("\n\n")
 
 	b.WriteString("Name:\n")
-	b.WriteString(styles.FocusedInput.Render(c.nameInput.View()))
+	b.WriteString(c.styles.FocusedInput.Render(c.nameInput.View()))
 
 	return b.String()
 }
@@ -568,18 +570,18 @@ func (c *CreateScreen) viewBasicInfo() string {
 func (c *CreateScreen) viewRace() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Choose Your Race"))
+	b.WriteString(c.styles.Title.Render("Choose Your Race"))
 	b.WriteString("\n\n")
 
 	for i, race := range character.Races {
 		cursor := "  "
-		style := styles.Unselected
+		style := c.styles.Unselected
 		if i == c.raceIndex {
 			cursor = "> "
-			style = styles.Selected
+			style = c.styles.Selected
 		}
 		speed := character.RaceSpeed[race]
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(c.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(fmt.Sprintf("%-12s (Speed: %d)", race, speed)))
 		b.WriteString("\n")
 	}
@@ -590,18 +592,18 @@ func (c *CreateScreen) viewRace() string {
 func (c *CreateScreen) viewClass() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Choose Your Class"))
+	b.WriteString(c.styles.Title.Render("Choose Your Class"))
 	b.WriteString("\n\n")
 
 	for i, class := range character.Classes {
 		cursor := "  "
-		style := styles.Unselected
+		style := c.styles.Unselected
 		if i == c.classIndex {
 			cursor = "> "
-			style = styles.Selected
+			style = c.styles.Selected
 		}
 		hitDie := character.ClassHitDice[class]
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(c.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(fmt.Sprintf("%-12s (Hit Die: d%d)", class, hitDie)))
 		b.WriteString("\n")
 	}
@@ -612,7 +614,7 @@ func (c *CreateScreen) viewClass() string {
 func (c *CreateScreen) viewAbilityMethod() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Choose Ability Score Method"))
+	b.WriteString(c.styles.Title.Render("Choose Ability Score Method"))
 	b.WriteString("\n\n")
 
 	methods := []struct {
@@ -626,15 +628,15 @@ func (c *CreateScreen) viewAbilityMethod() string {
 
 	for i, m := range methods {
 		cursor := "  "
-		style := styles.Unselected
+		style := c.styles.Unselected
 		if i == c.abilityMethodIndex {
 			cursor = "> "
-			style = styles.Selected
+			style = c.styles.Selected
 		}
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(c.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(m.name))
 		b.WriteString("\n")
-		b.WriteString(styles.Muted.Render("    " + m.desc))
+		b.WriteString(c.styles.Muted.Render("    " + m.desc))
 		b.WriteString("\n")
 	}
 
@@ -648,7 +650,7 @@ func (c *CreateScreen) viewAbilityAssignment() string {
 	if c.step == StepAbilityRoll {
 		title = "Assign Your Rolled Scores"
 	}
-	b.WriteString(styles.Title.Render(title))
+	b.WriteString(c.styles.Title.Render(title))
 	b.WriteString("\n\n")
 
 	// Show available scores
@@ -662,9 +664,9 @@ func (c *CreateScreen) viewAbilityAssignment() string {
 			}
 		}
 		if used {
-			b.WriteString(styles.Muted.Render(fmt.Sprintf("[%d]=%d ", i+1, score)))
+			b.WriteString(c.styles.Muted.Render(fmt.Sprintf("[%d]=%d ", i+1, score)))
 		} else {
-			b.WriteString(styles.SuccessText.Render(fmt.Sprintf("[%d]=%d ", i+1, score)))
+			b.WriteString(c.styles.SuccessText.Render(fmt.Sprintf("[%d]=%d ", i+1, score)))
 		}
 	}
 	b.WriteString("\n\n")
@@ -672,10 +674,10 @@ func (c *CreateScreen) viewAbilityAssignment() string {
 	// Show abilities
 	for i, ability := range character.Abilities {
 		cursor := "  "
-		style := styles.Unselected
+		style := c.styles.Unselected
 		if i == c.assignIndex {
 			cursor = "> "
-			style = styles.Selected
+			style = c.styles.Selected
 		}
 
 		scoreStr := "___"
@@ -685,7 +687,7 @@ func (c *CreateScreen) viewAbilityAssignment() string {
 			scoreStr = fmt.Sprintf("%2d (%s)", score, character.FormatModifierInt(mod))
 		}
 
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(c.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(fmt.Sprintf("%-14s: %s", ability, scoreStr)))
 		b.WriteString("\n")
 	}
@@ -696,18 +698,18 @@ func (c *CreateScreen) viewAbilityAssignment() string {
 func (c *CreateScreen) viewPointBuy() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Point Buy"))
+	b.WriteString(c.styles.Title.Render("Point Buy"))
 	b.WriteString("\n\n")
 
 	b.WriteString(fmt.Sprintf("Points remaining: %s\n\n",
-		styles.StatValue.Render(fmt.Sprintf("%d", c.pointBuyState.PointsRemaining))))
+		c.styles.StatValue.Render(fmt.Sprintf("%d", c.pointBuyState.PointsRemaining))))
 
 	for i, ability := range character.Abilities {
 		cursor := "  "
-		style := styles.Unselected
+		style := c.styles.Unselected
 		if i == c.assignIndex {
 			cursor = "> "
-			style = styles.Selected
+			style = c.styles.Selected
 		}
 
 		score := c.pointBuyState.Scores[ability]
@@ -727,7 +729,7 @@ func (c *CreateScreen) viewPointBuy() string {
 			arrows += " ▶"
 		}
 
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(c.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(fmt.Sprintf("%-14s: %2d (%s) cost:%d %s",
 			ability, score, character.FormatModifierInt(mod), cost, arrows)))
 		b.WriteString("\n")
@@ -740,17 +742,17 @@ func (c *CreateScreen) viewSkills() string {
 	var b strings.Builder
 
 	className := character.Classes[c.classIndex]
-	b.WriteString(styles.Title.Render(fmt.Sprintf("Choose %d Skills (%s)", c.skillsToSelect, className)))
+	b.WriteString(c.styles.Title.Render(fmt.Sprintf("Choose %d Skills (%s)", c.skillsToSelect, className)))
 	b.WriteString("\n\n")
 
 	b.WriteString(fmt.Sprintf("Selected: %d/%d\n\n", len(c.selectedSkills), c.skillsToSelect))
 
 	for i, skill := range c.availableSkills {
 		cursor := "  "
-		style := styles.Unselected
+		style := c.styles.Unselected
 		if i == c.skillCursor {
 			cursor = "> "
-			style = styles.Selected
+			style = c.styles.Selected
 		}
 
 		checkbox := "[ ]"
@@ -761,7 +763,7 @@ func (c *CreateScreen) viewSkills() string {
 			}
 		}
 
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(c.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(fmt.Sprintf("%s %s", checkbox, skill)))
 		b.WriteString("\n")
 	}
@@ -772,11 +774,11 @@ func (c *CreateScreen) viewSkills() string {
 func (c *CreateScreen) viewReview() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Review Your Character"))
+	b.WriteString(c.styles.Title.Render("Review Your Character"))
 	b.WriteString("\n\n")
 
 	// Basic info
-	b.WriteString(styles.Header.Render("Basic Info"))
+	b.WriteString(c.styles.Header.Render("Basic Info"))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("Name:       %s\n", c.nameInput.Value()))
 	b.WriteString(fmt.Sprintf("Race:       %s\n", character.Races[c.raceIndex]))
@@ -784,7 +786,7 @@ func (c *CreateScreen) viewReview() string {
 	b.WriteString("\n")
 
 	// Abilities
-	b.WriteString(styles.Header.Render("Ability Scores"))
+	b.WriteString(c.styles.Header.Render("Ability Scores"))
 	b.WriteString("\n")
 
 	for i, ability := range character.Abilities {
@@ -801,14 +803,14 @@ func (c *CreateScreen) viewReview() string {
 	b.WriteString("\n")
 
 	// Skills
-	b.WriteString(styles.Header.Render("Skill Proficiencies"))
+	b.WriteString(c.styles.Header.Render("Skill Proficiencies"))
 	b.WriteString("\n")
 	for _, skill := range c.selectedSkills {
 		b.WriteString(fmt.Sprintf("  • %s\n", skill))
 	}
 	b.WriteString("\n")
 
-	b.WriteString(styles.SuccessText.Render("Create this character? (y/n)"))
+	b.WriteString(c.styles.SuccessText.Render("Create this character? (y/n)"))
 
 	return b.String()
 }

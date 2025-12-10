@@ -112,19 +112,21 @@ func teaHandler(queries *db.Queries) bubbletea.Handler {
 	return func(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 		pty, _, _ := s.Pty()
 
+		// Create renderer for this SSH session
+		renderer := bubbletea.MakeRenderer(s)
+
+		// Create styles bound to this renderer
+		sessionStyles := styles.NewStyles(renderer)
+
 		// Get public key from session
 		var publicKey gossh.PublicKey
 		if s.PublicKey() != nil {
 			publicKey = s.PublicKey()
 		}
 
-		m := NewMainModel(queries, publicKey, pty.Window.Width, pty.Window.Height)
+		m := NewMainModel(queries, publicKey, pty.Window.Width, pty.Window.Height, sessionStyles, renderer)
 		return m, []tea.ProgramOption{
 			tea.WithAltScreen(),
-			tea.WithEnvironment([]string{
-				"TERM=" + pty.Term,
-				"COLORTERM=truecolor",
-			}),
 		}
 	}
 }
@@ -135,6 +137,10 @@ type MainModel struct {
 	auth      *auth.Service
 	ctx       context.Context
 	publicKey gossh.PublicKey
+
+	// Styles and renderer for this session
+	styles   *styles.Styles
+	renderer *lipgloss.Renderer
 
 	// Current screen
 	screen    string
@@ -153,7 +159,7 @@ type MainModel struct {
 	err    error
 }
 
-func NewMainModel(queries *db.Queries, publicKey gossh.PublicKey, width, height int) *MainModel {
+func NewMainModel(queries *db.Queries, publicKey gossh.PublicKey, width, height int, s *styles.Styles, r *lipgloss.Renderer) *MainModel {
 	ctx := context.Background()
 	authService := auth.NewService(queries)
 
@@ -162,6 +168,8 @@ func NewMainModel(queries *db.Queries, publicKey gossh.PublicKey, width, height 
 		auth:      authService,
 		ctx:       ctx,
 		publicKey: publicKey,
+		styles:    s,
+		renderer:  r,
 		screen:    "welcome",
 		width:     width,
 		height:    height,
@@ -173,12 +181,12 @@ func NewMainModel(queries *db.Queries, publicKey gossh.PublicKey, width, height 
 		if err == nil {
 			m.user = user
 			m.screen = "home"
-			m.home = screens.NewHomeScreen(ctx, queries, user)
+			m.home = screens.NewHomeScreen(ctx, queries, user, s)
 		}
 	}
 
 	if m.screen == "welcome" {
-		m.welcome = screens.NewWelcomeScreen(ctx, authService, publicKey)
+		m.welcome = screens.NewWelcomeScreen(ctx, authService, publicKey, s)
 	}
 
 	return m
@@ -214,7 +222,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.UserLoggedInMsg:
 		m.user = msg.User
 		m.screen = "home"
-		m.home = screens.NewHomeScreen(m.ctx, m.queries, m.user)
+		m.home = screens.NewHomeScreen(m.ctx, m.queries, m.user, m.styles)
 		return m, m.home.Init()
 
 	case screens.CharactersLoadedMsg:
@@ -225,19 +233,19 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.NavigateToCreateMsg:
 		m.screen = "create"
-		m.create = screens.NewCreateScreen(m.ctx, m.queries, m.user.ID)
+		m.create = screens.NewCreateScreen(m.ctx, m.queries, m.user.ID, m.styles)
 		return m, m.create.Init()
 
 	case screens.CharacterSelectedMsg:
 		m.selChar = &msg.Character
 		m.screen = "sheet"
-		m.sheet = screens.NewSheetScreen(m.ctx, m.queries, msg.Character)
+		m.sheet = screens.NewSheetScreen(m.ctx, m.queries, msg.Character, m.styles)
 		return m, m.sheet.Init()
 
 	case screens.CharacterCreatedMsg:
 		m.selChar = &msg.Character
 		m.screen = "sheet"
-		m.sheet = screens.NewSheetScreen(m.ctx, m.queries, msg.Character)
+		m.sheet = screens.NewSheetScreen(m.ctx, m.queries, msg.Character, m.styles)
 		return m, m.sheet.Init()
 
 	case screens.CharacterUpdatedMsg:
@@ -249,21 +257,21 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.CharacterDeletedMsg:
 		m.selChar = nil
 		m.screen = "home"
-		m.home = screens.NewHomeScreen(m.ctx, m.queries, m.user)
+		m.home = screens.NewHomeScreen(m.ctx, m.queries, m.user, m.styles)
 		return m, m.home.Init()
 
 	case screens.NavigateBackMsg:
 		switch m.screen {
 		case "create", "sheet":
 			m.screen = "home"
-			m.home = screens.NewHomeScreen(m.ctx, m.queries, m.user)
+			m.home = screens.NewHomeScreen(m.ctx, m.queries, m.user, m.styles)
 			return m, m.home.Init()
 		}
 
 	case screens.LogoutMsg:
 		m.user = nil
 		m.screen = "welcome"
-		m.welcome = screens.NewWelcomeScreen(m.ctx, m.auth, m.publicKey)
+		m.welcome = screens.NewWelcomeScreen(m.ctx, m.auth, m.publicKey, m.styles)
 		return m, m.welcome.Init()
 	}
 
@@ -308,7 +316,7 @@ func (m *MainModel) View() string {
 	}
 
 	if m.err != nil {
-		content += "\n" + styles.ErrorText.Render("Error: "+m.err.Error())
+		content += "\n" + m.styles.ErrorText.Render("Error: "+m.err.Error())
 	}
 
 	return lipgloss.Place(m.width, m.height,

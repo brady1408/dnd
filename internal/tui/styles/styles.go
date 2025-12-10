@@ -2,8 +2,8 @@ package styles
 
 import "github.com/charmbracelet/lipgloss"
 
+// Colors
 var (
-	// Colors
 	PrimaryColor    = lipgloss.Color("#7C3AED") // Purple
 	SecondaryColor  = lipgloss.Color("#EC4899") // Pink
 	SuccessColor    = lipgloss.Color("#10B981") // Green
@@ -13,158 +13,161 @@ var (
 	BackgroundColor = lipgloss.Color("#1F2937") // Dark gray
 	ForegroundColor = lipgloss.Color("#F9FAFB") // Light gray
 	HighlightColor  = lipgloss.Color("#A78BFA") // Light purple
-
-	// Muted text style
-	Muted = lipgloss.NewStyle().Foreground(MutedColor)
-
-	// Base styles
-	Base = lipgloss.NewStyle().
-		Foreground(ForegroundColor)
-
-	// Title
-	Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(PrimaryColor).
-		MarginBottom(1)
-
-	// Subtitle
-	Subtitle = lipgloss.NewStyle().
-		Foreground(MutedColor).
-		Italic(true)
-
-	// Header for sections
-	Header = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(SecondaryColor).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderBottom(true).
-		BorderForeground(MutedColor).
-		MarginBottom(1).
-		PaddingBottom(0)
-
-	// Box for content sections
-	Box = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(MutedColor).
-		Padding(1, 2)
-
-	// Highlight box
-	HighlightBox = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(PrimaryColor).
-		Padding(1, 2)
-
-	// Selected item
-	Selected = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(HighlightColor).
-		Background(lipgloss.Color("#374151"))
-
-	// Unselected item
-	Unselected = lipgloss.NewStyle().
-		Foreground(ForegroundColor)
-
-	// Cursor
-	Cursor = lipgloss.NewStyle().
-		Foreground(PrimaryColor).
-		Bold(true)
-
-	// Input field
-	InputField = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(MutedColor).
-		Padding(0, 1)
-
-	// Focused input
-	FocusedInput = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(PrimaryColor).
-		Padding(0, 1)
-
-	// Button
-	Button = lipgloss.NewStyle().
-		Foreground(ForegroundColor).
-		Background(MutedColor).
-		Padding(0, 2).
-		MarginRight(1)
-
-	// Focused button
-	FocusedButton = lipgloss.NewStyle().
-		Foreground(ForegroundColor).
-		Background(PrimaryColor).
-		Padding(0, 2).
-		Bold(true).
-		MarginRight(1)
-
-	// Help text
-	Help = lipgloss.NewStyle().
-		Foreground(MutedColor).
-		MarginTop(1)
-
-	// Error text
-	ErrorText = lipgloss.NewStyle().
-		Foreground(ErrorColor).
-		Bold(true)
-
-	// Success text
-	SuccessText = lipgloss.NewStyle().
-		Foreground(SuccessColor).
-		Bold(true)
-
-	// Warning text
-	WarningText = lipgloss.NewStyle().
-		Foreground(WarningColor)
-
-	// Stat value (ability score)
-	StatValue = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(PrimaryColor).
-		Width(3).
-		Align(lipgloss.Center)
-
-	// Stat modifier
-	StatMod = lipgloss.NewStyle().
-		Foreground(SecondaryColor).
-		Width(4).
-		Align(lipgloss.Center)
-
-	// Stat label
-	StatLabel = lipgloss.NewStyle().
-		Foreground(MutedColor).
-		Width(12)
-
-	// HP Current
-	HPCurrent = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(SuccessColor)
-
-	// HP Max
-	HPMax = lipgloss.NewStyle().
-		Foreground(MutedColor)
-
-	// HP Low (< 50%)
-	HPLow = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(WarningColor)
-
-	// HP Critical (< 25%)
-	HPCritical = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(ErrorColor)
-
-	// Proficient skill
-	Proficient = lipgloss.NewStyle().
-		Foreground(SuccessColor)
-
-	// Non-proficient skill
-	NotProficient = lipgloss.NewStyle().
-		Foreground(MutedColor)
-
-	// ASCII art header style
-	Logo = lipgloss.NewStyle().
-		Foreground(PrimaryColor).
-		Bold(true)
 )
+
+// Styles holds all lipgloss styles for the application, bound to a specific renderer
+type Styles struct {
+	Muted         lipgloss.Style
+	Base          lipgloss.Style
+	Title         lipgloss.Style
+	Subtitle      lipgloss.Style
+	Header        lipgloss.Style
+	Box           lipgloss.Style
+	HighlightBox  lipgloss.Style
+	Selected      lipgloss.Style
+	Unselected    lipgloss.Style
+	Cursor        lipgloss.Style
+	InputField    lipgloss.Style
+	FocusedInput  lipgloss.Style
+	Button        lipgloss.Style
+	FocusedButton lipgloss.Style
+	Help          lipgloss.Style
+	ErrorText     lipgloss.Style
+	SuccessText   lipgloss.Style
+	WarningText   lipgloss.Style
+	StatValue     lipgloss.Style
+	StatMod       lipgloss.Style
+	StatLabel     lipgloss.Style
+	HPCurrent     lipgloss.Style
+	HPMax         lipgloss.Style
+	HPLow         lipgloss.Style
+	HPCritical    lipgloss.Style
+	Proficient    lipgloss.Style
+	NotProficient lipgloss.Style
+	Logo          lipgloss.Style
+}
+
+// NewStyles creates a new Styles instance bound to the given renderer
+func NewStyles(r *lipgloss.Renderer) *Styles {
+	return &Styles{
+		Muted: r.NewStyle().Foreground(MutedColor),
+
+		Base: r.NewStyle().Foreground(ForegroundColor),
+
+		Title: r.NewStyle().
+			Bold(true).
+			Foreground(PrimaryColor).
+			MarginBottom(1),
+
+		Subtitle: r.NewStyle().
+			Foreground(MutedColor).
+			Italic(true),
+
+		Header: r.NewStyle().
+			Bold(true).
+			Foreground(SecondaryColor).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderBottom(true).
+			BorderForeground(MutedColor).
+			MarginBottom(1).
+			PaddingBottom(0),
+
+		Box: r.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(MutedColor).
+			Padding(1, 2),
+
+		HighlightBox: r.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(PrimaryColor).
+			Padding(1, 2),
+
+		Selected: r.NewStyle().
+			Bold(true).
+			Foreground(HighlightColor).
+			Background(lipgloss.Color("#374151")),
+
+		Unselected: r.NewStyle().Foreground(ForegroundColor),
+
+		Cursor: r.NewStyle().
+			Foreground(PrimaryColor).
+			Bold(true),
+
+		InputField: r.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(MutedColor).
+			Padding(0, 1),
+
+		FocusedInput: r.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(PrimaryColor).
+			Padding(0, 1),
+
+		Button: r.NewStyle().
+			Foreground(ForegroundColor).
+			Background(MutedColor).
+			Padding(0, 2).
+			MarginRight(1),
+
+		FocusedButton: r.NewStyle().
+			Foreground(ForegroundColor).
+			Background(PrimaryColor).
+			Padding(0, 2).
+			Bold(true).
+			MarginRight(1),
+
+		Help: r.NewStyle().
+			Foreground(MutedColor).
+			MarginTop(1),
+
+		ErrorText: r.NewStyle().
+			Foreground(ErrorColor).
+			Bold(true),
+
+		SuccessText: r.NewStyle().
+			Foreground(SuccessColor).
+			Bold(true),
+
+		WarningText: r.NewStyle().Foreground(WarningColor),
+
+		StatValue: r.NewStyle().
+			Bold(true).
+			Foreground(PrimaryColor).
+			Width(3).
+			Align(lipgloss.Center),
+
+		StatMod: r.NewStyle().
+			Foreground(SecondaryColor).
+			Width(4).
+			Align(lipgloss.Center),
+
+		StatLabel: r.NewStyle().
+			Foreground(MutedColor).
+			Width(12),
+
+		HPCurrent: r.NewStyle().
+			Bold(true).
+			Foreground(SuccessColor),
+
+		HPMax: r.NewStyle().Foreground(MutedColor),
+
+		HPLow: r.NewStyle().
+			Bold(true).
+			Foreground(WarningColor),
+
+		HPCritical: r.NewStyle().
+			Bold(true).
+			Foreground(ErrorColor),
+
+		Proficient: r.NewStyle().Foreground(SuccessColor),
+
+		NotProficient: r.NewStyle().Foreground(MutedColor),
+
+		Logo: r.NewStyle().
+			Foreground(PrimaryColor).
+			Bold(true),
+	}
+}
 
 // LogoText is the ASCII art logo
 const LogoText = `
@@ -175,7 +178,7 @@ const LogoText = `
 |____/|_| \_|____/  |____/|_| |_|\__,_|_|  \__,_| \__\___|_|
 `
 
-// Smaller logo for limited space
+// LogoSmall is a smaller logo for limited space
 const LogoSmall = `
 ╔═══════════════════════╗
 ║   D&D Character App   ║

@@ -27,6 +27,7 @@ type WelcomeScreen struct {
 	ctx         context.Context
 	authService *auth.Service
 	publicKey   ssh.PublicKey
+	styles      *styles.Styles
 
 	mode        WelcomeMode
 	menuIndex   int
@@ -42,7 +43,7 @@ type UserLoggedInMsg struct {
 	User *db.User
 }
 
-func NewWelcomeScreen(ctx context.Context, authService *auth.Service, publicKey ssh.PublicKey) *WelcomeScreen {
+func NewWelcomeScreen(ctx context.Context, authService *auth.Service, publicKey ssh.PublicKey, s *styles.Styles) *WelcomeScreen {
 	emailInput := textinput.New()
 	emailInput.Placeholder = "Email"
 	emailInput.CharLimit = 255
@@ -59,6 +60,7 @@ func NewWelcomeScreen(ctx context.Context, authService *auth.Service, publicKey 
 		ctx:         ctx,
 		authService: authService,
 		publicKey:   publicKey,
+		styles:      s,
 		mode:        ModeMenu,
 		emailInput:  emailInput,
 		passInput:   passInput,
@@ -293,7 +295,7 @@ func (w *WelcomeScreen) View() string {
 	var b strings.Builder
 
 	// Logo
-	b.WriteString(styles.Logo.Render(styles.LogoText))
+	b.WriteString(w.styles.Logo.Render(styles.LogoText))
 	b.WriteString("\n")
 
 	switch w.mode {
@@ -312,16 +314,16 @@ func (w *WelcomeScreen) View() string {
 	// Error message
 	if w.err != "" {
 		b.WriteString("\n")
-		b.WriteString(styles.ErrorText.Render("Error: " + w.err))
+		b.WriteString(w.styles.ErrorText.Render("Error: " + w.err))
 	}
 
 	// Help
 	b.WriteString("\n\n")
 	switch w.mode {
 	case ModeMenu:
-		b.WriteString(styles.Help.Render("↑/↓: navigate • enter: select • q: quit"))
+		b.WriteString(w.styles.Help.Render("↑/↓: navigate • enter: select • q: quit"))
 	default:
-		b.WriteString(styles.Help.Render("tab: next field • enter: submit • esc: back"))
+		b.WriteString(w.styles.Help.Render("tab: next field • enter: submit • esc: back"))
 	}
 
 	return lipgloss.Place(w.width, w.height,
@@ -332,25 +334,25 @@ func (w *WelcomeScreen) View() string {
 func (w *WelcomeScreen) renderMenu() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Welcome, Adventurer!"))
+	b.WriteString(w.styles.Title.Render("Welcome, Adventurer!"))
 	b.WriteString("\n\n")
 
 	menuItems := w.getMenuItems()
 	for i, item := range menuItems {
 		cursor := "  "
-		style := styles.Unselected
+		style := w.styles.Unselected
 		if i == w.menuIndex {
 			cursor = "> "
-			style = styles.Selected
+			style = w.styles.Selected
 		}
-		b.WriteString(styles.Cursor.Render(cursor))
+		b.WriteString(w.styles.Cursor.Render(cursor))
 		b.WriteString(style.Render(item))
 		b.WriteString("\n")
 	}
 
 	if w.publicKey != nil {
 		b.WriteString("\n")
-		b.WriteString(styles.SuccessText.Render("✓ SSH Key detected"))
+		b.WriteString(w.styles.SuccessText.Render("✓ SSH Key detected"))
 	}
 
 	return b.String()
@@ -359,31 +361,31 @@ func (w *WelcomeScreen) renderMenu() string {
 func (w *WelcomeScreen) renderForm(title string) string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render(title))
+	b.WriteString(w.styles.Title.Render(title))
 	b.WriteString("\n\n")
 
 	// Email field
-	emailStyle := styles.InputField
+	emailStyle := w.styles.InputField
 	if w.focusIndex == 0 {
-		emailStyle = styles.FocusedInput
+		emailStyle = w.styles.FocusedInput
 	}
 	b.WriteString("Email:\n")
 	b.WriteString(emailStyle.Render(w.emailInput.View()))
 	b.WriteString("\n\n")
 
 	// Password field
-	passStyle := styles.InputField
+	passStyle := w.styles.InputField
 	if w.focusIndex == 1 {
-		passStyle = styles.FocusedInput
+		passStyle = w.styles.FocusedInput
 	}
 	b.WriteString("Password:\n")
 	b.WriteString(passStyle.Render(w.passInput.View()))
 	b.WriteString("\n\n")
 
 	// Submit button
-	btnStyle := styles.Button
+	btnStyle := w.styles.Button
 	if w.focusIndex == 2 {
-		btnStyle = styles.FocusedButton
+		btnStyle = w.styles.FocusedButton
 	}
 	b.WriteString(btnStyle.Render("[ " + title + " ]"))
 
@@ -393,7 +395,7 @@ func (w *WelcomeScreen) renderForm(title string) string {
 func (w *WelcomeScreen) renderSSHRegister() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Register with SSH Key"))
+	b.WriteString(w.styles.Title.Render("Register with SSH Key"))
 	b.WriteString("\n\n")
 
 	if w.publicKey != nil {
@@ -403,11 +405,11 @@ func (w *WelcomeScreen) renderSSHRegister() string {
 			keyStr = keyStr[:50] + "..."
 		}
 		b.WriteString("Your SSH key:\n")
-		b.WriteString(styles.Box.Render(keyStr))
+		b.WriteString(w.styles.Box.Render(keyStr))
 		b.WriteString("\n\n")
 		b.WriteString("Register with this key? (y/n)")
 	} else {
-		b.WriteString(styles.ErrorText.Render("No SSH key detected."))
+		b.WriteString(w.styles.ErrorText.Render("No SSH key detected."))
 		b.WriteString("\n")
 		b.WriteString("Please connect with an SSH key or use email registration.")
 	}
@@ -418,7 +420,7 @@ func (w *WelcomeScreen) renderSSHRegister() string {
 func (w *WelcomeScreen) renderSSHLogin() string {
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("Login with SSH Key"))
+	b.WriteString(w.styles.Title.Render("Login with SSH Key"))
 	b.WriteString("\n\n")
 
 	if w.publicKey != nil {
@@ -428,11 +430,11 @@ func (w *WelcomeScreen) renderSSHLogin() string {
 			keyStr = keyStr[:50] + "..."
 		}
 		b.WriteString("Your SSH key:\n")
-		b.WriteString(styles.Box.Render(keyStr))
+		b.WriteString(w.styles.Box.Render(keyStr))
 		b.WriteString("\n\n")
 		b.WriteString("Login with this key? (y/n)")
 	} else {
-		b.WriteString(styles.ErrorText.Render("No SSH key detected."))
+		b.WriteString(w.styles.ErrorText.Render("No SSH key detected."))
 		b.WriteString("\n")
 		b.WriteString("Please connect with an SSH key or use email login.")
 	}
