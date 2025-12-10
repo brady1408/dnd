@@ -7,6 +7,7 @@ import (
 
 	"github.com/brady1408/dnd/internal/character"
 	"github.com/brady1408/dnd/internal/db"
+	"github.com/brady1408/dnd/internal/tui/components"
 	"github.com/brady1408/dnd/internal/tui/styles"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -39,6 +40,9 @@ type SheetScreen struct {
 	notesInput    textarea.Model
 	featuresInput textarea.Model
 	editCursor    int
+
+	// Table components
+	skillsTable *components.TableModel
 }
 
 type CharacterUpdatedMsg struct {
@@ -65,7 +69,17 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	featuresInput.CharLimit = 5000
 	featuresInput.ShowLineNumbers = false
 
-	return &SheetScreen{
+	// Create skills table
+	skillsTable := components.NewTable([]components.TableColumn{
+		{Title: "Prof", Width: 4},
+		{Title: "Skill", Width: 18},
+		{Title: "Mod", Width: 5},
+		{Title: "Ability", Width: 7},
+	}, s)
+	skillsTable.SetVisibleRows(12)
+	skillsTable.SetEmptyMessage("No skills available")
+
+	sheet := &SheetScreen{
 		ctx:           ctx,
 		queries:       queries,
 		char:          char,
@@ -76,7 +90,55 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 		featuresInput: featuresInput,
 		width:         80,
 		height:        24,
+		skillsTable:   skillsTable,
 	}
+
+	// Populate skills table
+	sheet.refreshSkillsTable()
+
+	return sheet
+}
+
+// refreshSkillsTable populates the skills table with current character data
+func (s *SheetScreen) refreshSkillsTable() {
+	abilities := map[string]int32{
+		"strength":     s.char.Strength,
+		"dexterity":    s.char.Dexterity,
+		"constitution": s.char.Constitution,
+		"intelligence": s.char.Intelligence,
+		"wisdom":       s.char.Wisdom,
+		"charisma":     s.char.Charisma,
+	}
+
+	var rows []components.TableRow
+	for _, skill := range character.SkillList {
+		abilityName := character.Skills[skill]
+		abilityScore := abilities[abilityName]
+
+		proficient := false
+		for _, p := range s.char.SkillProficiencies {
+			if strings.EqualFold(p, skill) {
+				proficient = true
+				break
+			}
+		}
+
+		mod := character.SkillBonus(int(abilityScore), int(s.char.Level), proficient)
+		profMark := "  "
+		if proficient {
+			profMark = "●"
+		}
+
+		abilityAbbr := strings.ToUpper(abilityName[:3])
+
+		rows = append(rows, components.TableRow{
+			ID:    skill,
+			Cells: []string{profMark, skill, character.FormatModifierInt(mod), abilityAbbr},
+			Data:  skill,
+		})
+	}
+
+	s.skillsTable.SetRows(rows)
 }
 
 func (s *SheetScreen) Init() tea.Cmd {
@@ -86,6 +148,7 @@ func (s *SheetScreen) Init() tea.Cmd {
 // SetCharacter updates the character data without resetting the view state
 func (s *SheetScreen) SetCharacter(char db.Character) {
 	s.char = char
+	s.refreshSkillsTable()
 }
 
 func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -115,11 +178,24 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle skills table navigation when on skills tab
+	if s.tab == 1 {
+		// Pass navigation keys to skills table
+		switch msg.String() {
+		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
+			var cmd tea.Cmd
+			s.skillsTable, cmd = s.skillsTable.Update(msg)
+			return s, cmd
+		}
+	}
+
 	switch msg.String() {
 	case "tab", "right", "l":
 		s.tab = (s.tab + 1) % 4
+		s.updateTableFocus()
 	case "shift+tab", "left", "h":
 		s.tab = (s.tab + 3) % 4
+		s.updateTableFocus()
 
 	case "e":
 		if s.tab == 2 { // Combat tab - edit HP
@@ -153,6 +229,11 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return s, nil
+}
+
+// updateTableFocus sets focus on the appropriate table based on current tab
+func (s *SheetScreen) updateTableFocus() {
+	s.skillsTable.SetFocused(s.tab == 1)
 }
 
 func (s *SheetScreen) updateEditHP(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -387,46 +468,13 @@ func (s *SheetScreen) viewSkills() string {
 	b.WriteString(s.styles.Header.Render("Skills"))
 	b.WriteString("\n\n")
 
-	abilities := map[string]int32{
-		"strength":     s.char.Strength,
-		"dexterity":    s.char.Dexterity,
-		"constitution": s.char.Constitution,
-		"intelligence": s.char.Intelligence,
-		"wisdom":       s.char.Wisdom,
-		"charisma":     s.char.Charisma,
-	}
+	// Use the table component
+	b.WriteString(s.skillsTable.View())
 
-	skillWidth := 18
-	modWidth := 4
-
-	for _, skill := range character.SkillList {
-		abilityName := character.Skills[skill]
-		abilityScore := abilities[abilityName]
-
-		proficient := false
-		for _, p := range s.char.SkillProficiencies {
-			if strings.EqualFold(p, skill) {
-				proficient = true
-				break
-			}
-		}
-
-		mod := character.SkillBonus(int(abilityScore), int(s.char.Level), proficient)
-		profMark := "  "
-		style := s.styles.NotProficient
-		if proficient {
-			profMark = "● "
-			style = s.styles.Proficient
-		}
-
-		// Abbreviate ability name
-		abilityAbbr := strings.ToUpper(abilityName[:3])
-
-		paddedSkill := fmt.Sprintf("%-*s", skillWidth, skill)
-		paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
-
-		b.WriteString(style.Render(profMark + paddedSkill + "  " + paddedMod + "  (" + abilityAbbr + ")"))
+	// Add help text for navigation
+	if s.skillsTable.IsFocused() {
 		b.WriteString("\n")
+		b.WriteString(s.styles.Help.Render("j/k: navigate • ●=proficient"))
 	}
 
 	return b.String()

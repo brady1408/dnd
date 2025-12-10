@@ -45,6 +45,18 @@ type Styles struct {
 	Proficient    lipgloss.Style
 	NotProficient lipgloss.Style
 	Logo          lipgloss.Style
+
+	// Table styles
+	TableHeader      lipgloss.Style
+	TableRow         lipgloss.Style
+	TableRowSelected lipgloss.Style
+	TableCell        lipgloss.Style
+	TableBorder      lipgloss.Style
+
+	// Tab styles
+	Tab         lipgloss.Style
+	TabActive   lipgloss.Style
+	TabInactive lipgloss.Style
 }
 
 // NewStyles creates a new Styles instance bound to the given renderer
@@ -166,6 +178,41 @@ func NewStyles(r *lipgloss.Renderer) *Styles {
 		Logo: r.NewStyle().
 			Foreground(PrimaryColor).
 			Bold(true),
+
+		// Table styles
+		TableHeader: r.NewStyle().
+			Bold(true).
+			Foreground(SecondaryColor).
+			PaddingRight(1),
+
+		TableRow: r.NewStyle().
+			Foreground(ForegroundColor),
+
+		TableRowSelected: r.NewStyle().
+			Bold(true).
+			Foreground(HighlightColor).
+			Background(lipgloss.Color("#374151")),
+
+		TableCell: r.NewStyle().
+			PaddingRight(1),
+
+		TableBorder: r.NewStyle().
+			Foreground(MutedColor),
+
+		// Tab styles
+		Tab: r.NewStyle().
+			Padding(0, 2),
+
+		TabActive: r.NewStyle().
+			Foreground(ForegroundColor).
+			Background(PrimaryColor).
+			Padding(0, 2).
+			Bold(true),
+
+		TabInactive: r.NewStyle().
+			Foreground(MutedColor).
+			Background(lipgloss.Color("#374151")).
+			Padding(0, 2),
 	}
 }
 
