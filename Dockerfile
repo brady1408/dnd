@@ -21,8 +21,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS connections
-RUN apk add --no-cache ca-certificates
+# Install ca-certificates for HTTPS and ncurses for terminal color support
+RUN apk add --no-cache ca-certificates ncurses-terminfo-base
 
 # Create directory for SSH host keys
 RUN mkdir -p /app/.ssh
