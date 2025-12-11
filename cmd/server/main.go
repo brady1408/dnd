@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/brady1408/dnd/internal/auth"
 	"github.com/brady1408/dnd/internal/db"
+	"github.com/brady1408/dnd/internal/db/migrations"
 	"github.com/brady1408/dnd/internal/tui/screens"
 	"github.com/brady1408/dnd/internal/tui/styles"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -23,6 +25,7 @@ import (
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/lib/pq" // postgres driver for migrations
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -44,6 +47,11 @@ func main() {
 		DatabaseURL: getEnv("DATABASE_URL", "postgresql://postgres:postgres@192.168.23.44:5434/dnd_character?sslmode=disable"),
 		Host:        getEnv("HOST", host),
 		Port:        getEnv("PORT", port),
+	}
+
+	// Run migrations first (using database/sql for pomegranate compatibility)
+	if err := runMigrations(cfg.DatabaseURL); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	// Connect to database
@@ -336,3 +344,25 @@ var _ tea.Model = (*MainModel)(nil)
 
 // Ensure textinput is imported (used by screens)
 var _ = textinput.Model{}
+
+// runMigrations connects to the database and runs any pending migrations
+func runMigrations(databaseURL string) error {
+	// Convert pgx-style URL to lib/pq style if needed
+	// pgx uses "postgresql://" and lib/pq uses "postgres://"
+	connStr := databaseURL
+	if len(connStr) > 13 && connStr[:13] == "postgresql://" {
+		connStr = "postgres://" + connStr[13:]
+	}
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return fmt.Errorf("failed to connect for migrations: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database for migrations: %w", err)
+	}
+
+	return migrations.Run(db)
+}
