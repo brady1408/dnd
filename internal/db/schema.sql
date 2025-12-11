@@ -100,6 +100,8 @@ CREATE TABLE character_details (
     eyes VARCHAR(50),
     skin VARCHAR(50),
     hair VARCHAR(50),
+    size VARCHAR(20),
+    gender VARCHAR(50),
 
     -- Personal details
     faith_deity VARCHAR(100),

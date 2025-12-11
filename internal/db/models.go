@@ -85,6 +85,8 @@ type CharacterDetail struct {
 	Eyes                pgtype.Text `json:"eyes"`
 	Skin                pgtype.Text `json:"skin"`
 	Hair                pgtype.Text `json:"hair"`
+	Size                pgtype.Text `json:"size"`
+	Gender              pgtype.Text `json:"gender"`
 	FaithDeity          pgtype.Text `json:"faith_deity"`
 	PersonalityTraits   pgtype.Text `json:"personality_traits"`
 	Ideals              pgtype.Text `json:"ideals"`

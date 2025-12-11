@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/brady1408/dnd/internal/tui/styles"
@@ -29,6 +30,7 @@ type FormField struct {
 	Required    bool      // Whether field is required
 	Placeholder string    // Placeholder text
 	Width       int       // Input width (0 = auto)
+	Row         int       // Row number for grouping fields (0 = auto, same row number = same line)
 }
 
 // ModalSaveMsg is sent when the form is saved
@@ -143,10 +145,26 @@ func (m *ModalModel) initStyles() {
 
 // SetSize sets the terminal size for centering
 func (m *ModalModel) SetSize(width, height int) {
-	// Modal takes up a portion of the screen
-	m.width = min(60, width-10)
-	m.height = min(len(m.fields)*3+8, height-6)
-	m.boxStyle = m.boxStyle.Width(m.width)
+	// Modal uses almost all available width
+	m.width = width - 4
+	if m.width < 80 {
+		m.width = 80
+	}
+	m.height = height - 4
+
+	// Recreate box style with new width
+	m.boxStyle = m.styles.HighlightBox.
+		Width(m.width).
+		Padding(1, 2)
+
+	// Update input widths to fit columns
+	inputWidth := (m.width - 20) / 2 // Half width minus labels and padding
+	if inputWidth < 20 {
+		inputWidth = 20
+	}
+	for i := range m.inputs {
+		m.inputs[i].Width = inputWidth
+	}
 }
 
 // Show makes the modal visible
@@ -327,56 +345,59 @@ func (m *ModalModel) View() string {
 	b.WriteString(m.titleStyle.Render(m.title))
 	b.WriteString("\n\n")
 
-	// Fields
+	// Simple single-column layout with plain text
 	for i, field := range m.fields {
 		isFocused := m.focused && i == m.cursor
+
+		// Cursor indicator
+		cursor := "  "
+		if isFocused {
+			cursor = "> "
+		}
 
 		// Label
 		label := field.Label
 		if field.Required {
 			label += " *"
 		}
-		b.WriteString(m.labelStyle.Render(label))
 
-		// Input based on type
+		// Get raw value (not the styled View)
+		var value string
 		switch field.Type {
 		case FieldText, FieldNumber:
-			if isFocused {
-				b.WriteString(m.styles.FocusedInput.Render(m.inputs[i].View()))
-			} else {
-				b.WriteString(m.styles.InputField.Render(m.inputs[i].View()))
+			value = m.inputs[i].Value()
+			if value == "" {
+				value = field.Placeholder
 			}
-
 		case FieldSelect:
 			opts := field.Options
 			selected := m.selectCursors[i]
-			var optView string
 			if len(opts) > 0 && selected < len(opts) {
-				optView = "◀ " + opts[selected] + " ▶"
+				value = "◀ " + opts[selected] + " ▶"
 			} else {
-				optView = "(none)"
+				value = "(none)"
 			}
-			if isFocused {
-				b.WriteString(m.styles.FocusedInput.Render(optView))
-			} else {
-				b.WriteString(m.styles.InputField.Render(optView))
-			}
-
 		case FieldCheckbox:
-			var checkView string
 			if m.checkboxValues[i] {
-				checkView = "[✓]"
+				value = "[✓]"
 			} else {
-				checkView = "[ ]"
-			}
-			if isFocused {
-				b.WriteString(m.styles.FocusedButton.Render(checkView))
-			} else {
-				b.WriteString(m.styles.Button.Render(checkView))
+				value = "[ ]"
 			}
 		}
 
-		b.WriteString("\n\n")
+		// Simple format: "> Label:        value"
+		if isFocused {
+			// Show cursor position for focused text field
+			if field.Type == FieldText || field.Type == FieldNumber {
+				value = m.inputs[i].Value() + "▏"
+				if m.inputs[i].Value() == "" {
+					value = "▏" + field.Placeholder
+				}
+			}
+			b.WriteString(fmt.Sprintf("%s%-14s %s\n", cursor, label+":", value))
+		} else {
+			b.WriteString(fmt.Sprintf("%s%-14s %s\n", cursor, label+":", value))
+		}
 	}
 
 	// Help text

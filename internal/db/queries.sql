@@ -117,6 +117,11 @@ UPDATE characters SET
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterAlignment :one
+UPDATE characters SET alignment = $2
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 
@@ -143,13 +148,15 @@ UPDATE character_details SET
     eyes = $5,
     skin = $6,
     hair = $7,
-    faith_deity = $8,
-    personality_traits = $9,
-    ideals = $10,
-    bonds = $11,
-    flaws = $12,
-    backstory = $13,
-    allies_organizations = $14
+    size = $8,
+    gender = $9,
+    faith_deity = $10,
+    personality_traits = $11,
+    ideals = $12,
+    bonds = $13,
+    flaws = $14,
+    backstory = $15,
+    allies_organizations = $16
 WHERE character_id = $1
 RETURNING *;
 

@@ -237,7 +237,7 @@ func (q *Queries) CreateCharacterCurrency(ctx context.Context, characterID pgtyp
 const createCharacterDetails = `-- name: CreateCharacterDetails :one
 INSERT INTO character_details (character_id)
 VALUES ($1)
-RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, size, gender, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
 `
 
 func (q *Queries) CreateCharacterDetails(ctx context.Context, characterID pgtype.UUID) (CharacterDetail, error) {
@@ -252,6 +252,8 @@ func (q *Queries) CreateCharacterDetails(ctx context.Context, characterID pgtype
 		&i.Eyes,
 		&i.Skin,
 		&i.Hair,
+		&i.Size,
+		&i.Gender,
 		&i.FaithDeity,
 		&i.PersonalityTraits,
 		&i.Ideals,
@@ -855,7 +857,7 @@ func (q *Queries) GetCharacterCurrency(ctx context.Context, characterID pgtype.U
 
 const getCharacterDetails = `-- name: GetCharacterDetails :one
 
-SELECT id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used FROM character_details WHERE character_id = $1
+SELECT id, character_id, age, height, weight, eyes, skin, hair, size, gender, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used FROM character_details WHERE character_id = $1
 `
 
 // ============================================
@@ -873,6 +875,8 @@ func (q *Queries) GetCharacterDetails(ctx context.Context, characterID pgtype.UU
 		&i.Eyes,
 		&i.Skin,
 		&i.Hair,
+		&i.Size,
+		&i.Gender,
 		&i.FaithDeity,
 		&i.PersonalityTraits,
 		&i.Ideals,
@@ -1512,6 +1516,52 @@ func (q *Queries) UpdateCharacterActionUses(ctx context.Context, arg UpdateChara
 	return i, err
 }
 
+const updateCharacterAlignment = `-- name: UpdateCharacterAlignment :one
+UPDATE characters SET alignment = $2
+WHERE id = $1
+RETURNING id, user_id, name, class, level, race, background, alignment, experience_points, strength, dexterity, constitution, intelligence, wisdom, charisma, max_hit_points, current_hit_points, temporary_hit_points, armor_class, speed, saving_throw_proficiencies, skill_proficiencies, equipment, features_traits, notes, created_at, updated_at
+`
+
+type UpdateCharacterAlignmentParams struct {
+	ID        pgtype.UUID `json:"id"`
+	Alignment pgtype.Text `json:"alignment"`
+}
+
+func (q *Queries) UpdateCharacterAlignment(ctx context.Context, arg UpdateCharacterAlignmentParams) (Character, error) {
+	row := q.db.QueryRow(ctx, updateCharacterAlignment, arg.ID, arg.Alignment)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Class,
+		&i.Level,
+		&i.Race,
+		&i.Background,
+		&i.Alignment,
+		&i.ExperiencePoints,
+		&i.Strength,
+		&i.Dexterity,
+		&i.Constitution,
+		&i.Intelligence,
+		&i.Wisdom,
+		&i.Charisma,
+		&i.MaxHitPoints,
+		&i.CurrentHitPoints,
+		&i.TemporaryHitPoints,
+		&i.ArmorClass,
+		&i.Speed,
+		&i.SavingThrowProficiencies,
+		&i.SkillProficiencies,
+		&i.Equipment,
+		&i.FeaturesTraits,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateCharacterAttack = `-- name: UpdateCharacterAttack :one
 UPDATE character_attacks SET
     name = $2,
@@ -1758,15 +1808,17 @@ UPDATE character_details SET
     eyes = $5,
     skin = $6,
     hair = $7,
-    faith_deity = $8,
-    personality_traits = $9,
-    ideals = $10,
-    bonds = $11,
-    flaws = $12,
-    backstory = $13,
-    allies_organizations = $14
+    size = $8,
+    gender = $9,
+    faith_deity = $10,
+    personality_traits = $11,
+    ideals = $12,
+    bonds = $13,
+    flaws = $14,
+    backstory = $15,
+    allies_organizations = $16
 WHERE character_id = $1
-RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, size, gender, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
 `
 
 type UpdateCharacterDetailsParams struct {
@@ -1777,6 +1829,8 @@ type UpdateCharacterDetailsParams struct {
 	Eyes                pgtype.Text `json:"eyes"`
 	Skin                pgtype.Text `json:"skin"`
 	Hair                pgtype.Text `json:"hair"`
+	Size                pgtype.Text `json:"size"`
+	Gender              pgtype.Text `json:"gender"`
 	FaithDeity          pgtype.Text `json:"faith_deity"`
 	PersonalityTraits   pgtype.Text `json:"personality_traits"`
 	Ideals              pgtype.Text `json:"ideals"`
@@ -1795,6 +1849,8 @@ func (q *Queries) UpdateCharacterDetails(ctx context.Context, arg UpdateCharacte
 		arg.Eyes,
 		arg.Skin,
 		arg.Hair,
+		arg.Size,
+		arg.Gender,
 		arg.FaithDeity,
 		arg.PersonalityTraits,
 		arg.Ideals,
@@ -1813,6 +1869,8 @@ func (q *Queries) UpdateCharacterDetails(ctx context.Context, arg UpdateCharacte
 		&i.Eyes,
 		&i.Skin,
 		&i.Hair,
+		&i.Size,
+		&i.Gender,
 		&i.FaithDeity,
 		&i.PersonalityTraits,
 		&i.Ideals,
@@ -2283,7 +2341,7 @@ UPDATE character_details SET
     death_save_successes = $2,
     death_save_failures = $3
 WHERE character_id = $1
-RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, size, gender, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
 `
 
 type UpdateDeathSavesParams struct {
@@ -2304,6 +2362,8 @@ func (q *Queries) UpdateDeathSaves(ctx context.Context, arg UpdateDeathSavesPara
 		&i.Eyes,
 		&i.Skin,
 		&i.Hair,
+		&i.Size,
+		&i.Gender,
 		&i.FaithDeity,
 		&i.PersonalityTraits,
 		&i.Ideals,
@@ -2322,7 +2382,7 @@ func (q *Queries) UpdateDeathSaves(ctx context.Context, arg UpdateDeathSavesPara
 const updateHitDiceUsed = `-- name: UpdateHitDiceUsed :one
 UPDATE character_details SET hit_dice_used = $2
 WHERE character_id = $1
-RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, size, gender, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
 `
 
 type UpdateHitDiceUsedParams struct {
@@ -2342,6 +2402,8 @@ func (q *Queries) UpdateHitDiceUsed(ctx context.Context, arg UpdateHitDiceUsedPa
 		&i.Eyes,
 		&i.Skin,
 		&i.Hair,
+		&i.Size,
+		&i.Gender,
 		&i.FaithDeity,
 		&i.PersonalityTraits,
 		&i.Ideals,
@@ -2360,7 +2422,7 @@ func (q *Queries) UpdateHitDiceUsed(ctx context.Context, arg UpdateHitDiceUsedPa
 const updateInspiration = `-- name: UpdateInspiration :one
 UPDATE character_details SET inspiration = $2
 WHERE character_id = $1
-RETURNING id, character_id, age, height, weight, eyes, skin, hair, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
+RETURNING id, character_id, age, height, weight, eyes, skin, hair, size, gender, faith_deity, personality_traits, ideals, bonds, flaws, backstory, allies_organizations, inspiration, death_save_successes, death_save_failures, hit_dice_used
 `
 
 type UpdateInspirationParams struct {
@@ -2380,6 +2442,8 @@ func (q *Queries) UpdateInspiration(ctx context.Context, arg UpdateInspirationPa
 		&i.Eyes,
 		&i.Skin,
 		&i.Hair,
+		&i.Size,
+		&i.Gender,
 		&i.FaithDeity,
 		&i.PersonalityTraits,
 		&i.Ideals,

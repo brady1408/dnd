@@ -24,6 +24,7 @@ const (
 	ModeEditHP
 	ModeEditNotes
 	ModeEditFeatures
+	ModeEditBackground
 	ModeHelp
 )
 
@@ -39,10 +40,11 @@ type SheetScreen struct {
 	height     int
 
 	// Edit mode inputs
-	hpInput       textinput.Model
-	notesInput    textarea.Model
-	featuresInput textarea.Model
-	editCursor    int
+	hpInput         textinput.Model
+	notesInput      textarea.Model
+	featuresInput   textarea.Model
+	backgroundModal *components.ModalModel
+	editCursor      int
 
 	// Table components
 	skillsTable     *components.TableModel
@@ -584,6 +586,17 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.statusMsg = ""
 		s.statusIsErr = false
 		return s, nil
+	case components.ModalSaveMsg:
+		if s.mode == ModeEditBackground {
+			s.mode = ModeView
+			return s, s.saveBackgroundDetails(msg.Values)
+		}
+	case components.ModalCancelMsg:
+		if s.mode == ModeEditBackground {
+			s.mode = ModeView
+			s.backgroundModal = nil
+		}
+		return s, nil
 	}
 
 	// Handle mode-specific updates
@@ -600,6 +613,12 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s.updateEditNotes(msg)
 	case ModeEditFeatures:
 		return s.updateEditFeatures(msg)
+	case ModeEditBackground:
+		if s.backgroundModal != nil {
+			var cmd tea.Cmd
+			s.backgroundModal, cmd = s.backgroundModal.Update(msg)
+			return s, cmd
+		}
 	case ModeHelp:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			// Any key closes help
@@ -750,6 +769,10 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.mode = ModeEditHP
 			s.hpInput.SetValue(fmt.Sprintf("%d", s.char.CurrentHitPoints))
 			s.hpInput.Focus()
+			return s, textinput.Blink
+		} else if s.tab == 5 { // Background tab - edit background details
+			s.openBackgroundModal()
+			s.mode = ModeEditBackground
 			return s, textinput.Blink
 		} else if s.tab == 6 { // Notes tab - edit notes
 			s.mode = ModeEditNotes
@@ -965,6 +988,11 @@ func (s *SheetScreen) View() string {
 		return s.renderHelpOverlay(content)
 	}
 
+	// Overlay background modal if editing
+	if s.mode == ModeEditBackground && s.backgroundModal != nil {
+		return s.backgroundModal.ViewWithOverlay(content, s.width, s.height)
+	}
+
 	return content
 }
 
@@ -987,21 +1015,17 @@ func (s *SheetScreen) viewCore() string {
 
 	// Build left column: Ability Scores
 	var leftCol strings.Builder
-	leftCol.WriteString(s.styles.Header.Render("Ability Scores"))
-	leftCol.WriteString("\n\n")
+	leftCol.WriteString("Ability Scores\n\n")
 
 	for _, a := range abilities {
 		mod := character.AbilityModifier(int(a.score))
-		leftCol.WriteString(fmt.Sprintf("  %-3s %2d  %s\n",
-			a.abbr,
-			a.score,
-			s.styles.StatMod.Render(character.FormatModifierInt(mod))))
+		modStr := character.FormatModifierInt(mod)
+		leftCol.WriteString(fmt.Sprintf("  %-3s %2d  %3s\n", a.abbr, a.score, modStr))
 	}
 
 	// Build right column: Saving Throws
 	var rightCol strings.Builder
-	rightCol.WriteString(s.styles.Header.Render("Saving Throws"))
-	rightCol.WriteString("\n\n")
+	rightCol.WriteString("Saving Throws\n\n")
 
 	for _, a := range abilities {
 		proficient := false
@@ -1014,22 +1038,21 @@ func (s *SheetScreen) viewCore() string {
 
 		mod := character.SavingThrow(int(a.score), int(s.char.Level), proficient)
 		profMark := "○"
-		style := s.styles.NotProficient
 		if proficient {
 			profMark = "●"
-			style = s.styles.Proficient
 		}
-		rightCol.WriteString(style.Render(fmt.Sprintf("  %s %-3s  %s\n",
-			profMark,
-			a.abbr,
-			character.FormatModifierInt(mod))))
+		modStr := character.FormatModifierInt(mod)
+		rightCol.WriteString(fmt.Sprintf("  %s %-3s %3s\n", profMark, a.abbr, modStr))
 	}
 
-	// Join columns horizontally with gap
+	// Style columns with fixed width
+	leftStyle := lipgloss.NewStyle().Width(18)
+	rightStyle := lipgloss.NewStyle().Width(18)
+
+	// Join columns horizontally
 	topSection := lipgloss.JoinHorizontal(lipgloss.Top,
-		leftCol.String(),
-		"    ", // gap between columns
-		rightCol.String(),
+		leftStyle.Render(leftCol.String()),
+		rightStyle.Render(rightCol.String()),
 	)
 
 	// Build the full view
@@ -1060,45 +1083,37 @@ func (s *SheetScreen) viewCombat() string {
 		hpStyle = s.styles.HPLow
 	}
 
-	// Right-align labels to align on the colon
-	labelWidth := 14
-
 	// Combat stats panel
-	b.WriteString(s.styles.Header.Render("Combat Stats"))
-	b.WriteString("\n\n")
+	b.WriteString("Combat Stats\n\n")
 
-	if s.mode == ModeEditHP {
-		b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Hit Points:"))
-		b.WriteString(s.styles.FocusedInput.Render(s.hpInput.View()))
-		b.WriteString(fmt.Sprintf(" / %d", s.char.MaxHitPoints))
-	} else {
-		b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Hit Points:"))
-		b.WriteString(hpStyle.Render(fmt.Sprintf("%d", s.char.CurrentHitPoints)))
-		b.WriteString(" / ")
-		b.WriteString(s.styles.HPMax.Render(fmt.Sprintf("%d", s.char.MaxHitPoints)))
-	}
-
-	if s.char.TemporaryHitPoints > 0 {
-		b.WriteString(fmt.Sprintf(" (+%d temp)", s.char.TemporaryHitPoints))
-	}
-	b.WriteString("\n")
-
-	// Other combat stats
 	initiative := character.Initiative(int(s.char.Dexterity))
-
-	b.WriteString(fmt.Sprintf("%*s ", labelWidth, "Armor Class:"))
-	b.WriteString(s.styles.StatValue.Render(fmt.Sprintf("%d", s.char.ArmorClass)))
-	b.WriteString("    ")
-	b.WriteString(fmt.Sprintf("%*s ", 10, "Initiative:"))
-	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(initiative)))
-	b.WriteString("    ")
-	b.WriteString(fmt.Sprintf("%*s ", 6, "Speed:"))
-	b.WriteString(s.styles.StatValue.Render(fmt.Sprintf("%d", s.char.Speed)))
-	b.WriteString(" ft\n")
-
-	// Hit dice
 	hitDie := character.ClassHitDice[s.char.Class]
-	b.WriteString(fmt.Sprintf("%*s %dd%d\n", labelWidth, "Hit Dice:", s.char.Level, hitDie))
+
+	// Compact single-line stats bar
+	if s.mode == ModeEditHP {
+		b.WriteString(fmt.Sprintf("  HP: %s/%d  |  AC: %d  |  Init: %s  |  Speed: %d ft  |  HD: %dd%d\n",
+			s.hpInput.View(),
+			s.char.MaxHitPoints,
+			s.char.ArmorClass,
+			character.FormatModifierInt(initiative),
+			s.char.Speed,
+			s.char.Level,
+			hitDie))
+	} else {
+		hpStr := fmt.Sprintf("%s/%s",
+			hpStyle.Render(fmt.Sprintf("%d", s.char.CurrentHitPoints)),
+			s.styles.HPMax.Render(fmt.Sprintf("%d", s.char.MaxHitPoints)))
+		if s.char.TemporaryHitPoints > 0 {
+			hpStr += fmt.Sprintf("+%d", s.char.TemporaryHitPoints)
+		}
+		b.WriteString(fmt.Sprintf("  HP: %s  |  AC: %d  |  Init: %s  |  Speed: %d ft  |  HD: %dd%d\n",
+			hpStr,
+			s.char.ArmorClass,
+			character.FormatModifierInt(initiative),
+			s.char.Speed,
+			s.char.Level,
+			hitDie))
+	}
 
 	// Attacks section
 	b.WriteString("\n")
@@ -1361,14 +1376,25 @@ func (s *SheetScreen) viewFeatures() string {
 func (s *SheetScreen) viewBackground() string {
 	var b strings.Builder
 
-	// Character basic info
+	// Character identity
 	b.WriteString(s.styles.Header.Render("Character Info"))
 	b.WriteString("\n\n")
 
 	labelWidth := 12
-	b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Background:", s.styles.StatValue.Render(s.char.Background.String)))
+	b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Name:", s.char.Name))
+	b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Race:", s.char.Race))
+	b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Class:", s.char.Class))
+	b.WriteString(fmt.Sprintf("  %*s %d\n", labelWidth, "Level:", s.char.Level))
+	nextLevelXP := character.XPThresholds[int(s.char.Level)+1]
+	if s.char.Level >= 20 {
+		nextLevelXP = character.XPThresholds[20]
+	}
+	b.WriteString(fmt.Sprintf("  %*s %d / %d\n", labelWidth, "Experience:", s.char.ExperiencePoints, nextLevelXP))
+	if s.char.Background.Valid {
+		b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Background:", s.char.Background.String))
+	}
 	if s.char.Alignment.Valid {
-		b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Alignment:", s.styles.StatValue.Render(s.char.Alignment.String)))
+		b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Alignment:", s.char.Alignment.String))
 	}
 
 	// Physical characteristics from details
@@ -1377,26 +1403,32 @@ func (s *SheetScreen) viewBackground() string {
 		b.WriteString(s.styles.Header.Render("Physical Traits"))
 		b.WriteString("\n\n")
 
+		if s.details.Size.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Size:", s.details.Size.String))
+		}
+		if s.details.Gender.Valid {
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Gender:", s.details.Gender.String))
+		}
 		if s.details.Age.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Age:", s.styles.StatValue.Render(s.details.Age.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Age:", s.details.Age.String))
 		}
 		if s.details.Height.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Height:", s.styles.StatValue.Render(s.details.Height.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Height:", s.details.Height.String))
 		}
 		if s.details.Weight.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Weight:", s.styles.StatValue.Render(s.details.Weight.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Weight:", s.details.Weight.String))
 		}
 		if s.details.Eyes.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Eyes:", s.styles.StatValue.Render(s.details.Eyes.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Eyes:", s.details.Eyes.String))
 		}
 		if s.details.Hair.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Hair:", s.styles.StatValue.Render(s.details.Hair.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Hair:", s.details.Hair.String))
 		}
 		if s.details.Skin.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Skin:", s.styles.StatValue.Render(s.details.Skin.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Skin:", s.details.Skin.String))
 		}
 		if s.details.FaithDeity.Valid {
-			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Faith/Deity:", s.styles.StatValue.Render(s.details.FaithDeity.String)))
+			b.WriteString(fmt.Sprintf("  %*s %s\n", labelWidth, "Faith/Deity:", s.details.FaithDeity.String))
 		}
 
 		// Personality
@@ -1504,7 +1536,7 @@ func (s *SheetScreen) getHelp() string {
 		case 4: // Features
 			help += " • 1-4: filter type • j/k: navigate"
 		case 5: // Background
-			help += " • view only"
+			help += " • e: edit details"
 		case 6: // Notes
 			help += " • e: edit notes • f: edit features"
 		}
@@ -1541,11 +1573,12 @@ func (s *SheetScreen) renderHelpOverlay(background string) string {
 	// Tab-specific
 	b.WriteString(s.styles.Header.Render("Tab-Specific"))
 	b.WriteString("\n")
-	b.WriteString("  Combat:    e: edit HP, 1/2: switch tables\n")
-	b.WriteString("  Spells:    0-9: filter by level\n")
-	b.WriteString("  Inventory: 1/2: switch tables\n")
-	b.WriteString("  Features:  1-4: filter by type\n")
-	b.WriteString("  Notes:     e: edit notes, f: edit features\n")
+	b.WriteString("  Combat:     e: edit HP, 1/2: switch tables\n")
+	b.WriteString("  Spells:     0-9: filter by level\n")
+	b.WriteString("  Inventory:  1/2: switch tables\n")
+	b.WriteString("  Features:   1-4: filter by type\n")
+	b.WriteString("  Background: e: edit details\n")
+	b.WriteString("  Notes:      e: edit notes, f: edit features\n")
 	b.WriteString("\n")
 
 	// Editing
@@ -1573,4 +1606,143 @@ func (s *SheetScreen) renderHelpOverlay(background string) string {
 	// Dim the background (simple approach - just return centered overlay)
 	// For a true dimmed effect, we'd need to process each character
 	return centered
+}
+
+// openBackgroundModal creates and shows the background edit modal
+func (s *SheetScreen) openBackgroundModal() {
+	// Get current values from details (or empty if nil)
+	var size, gender, age, height, weight, eyes, hair, skin, faith string
+	var traits, ideals, bonds, flaws, backstory, allies string
+
+	if s.details != nil {
+		if s.details.Size.Valid {
+			size = s.details.Size.String
+		}
+		if s.details.Gender.Valid {
+			gender = s.details.Gender.String
+		}
+		if s.details.Age.Valid {
+			age = s.details.Age.String
+		}
+		if s.details.Height.Valid {
+			height = s.details.Height.String
+		}
+		if s.details.Weight.Valid {
+			weight = s.details.Weight.String
+		}
+		if s.details.Eyes.Valid {
+			eyes = s.details.Eyes.String
+		}
+		if s.details.Hair.Valid {
+			hair = s.details.Hair.String
+		}
+		if s.details.Skin.Valid {
+			skin = s.details.Skin.String
+		}
+		if s.details.FaithDeity.Valid {
+			faith = s.details.FaithDeity.String
+		}
+		if s.details.PersonalityTraits.Valid {
+			traits = s.details.PersonalityTraits.String
+		}
+		if s.details.Ideals.Valid {
+			ideals = s.details.Ideals.String
+		}
+		if s.details.Bonds.Valid {
+			bonds = s.details.Bonds.String
+		}
+		if s.details.Flaws.Valid {
+			flaws = s.details.Flaws.String
+		}
+		if s.details.Backstory.Valid {
+			backstory = s.details.Backstory.String
+		}
+		if s.details.AlliesOrganizations.Valid {
+			allies = s.details.AlliesOrganizations.String
+		}
+	}
+
+	// Get alignment from character (stored in characters table, not details)
+	alignment := ""
+	if s.char.Alignment.Valid {
+		alignment = s.char.Alignment.String
+	}
+
+	// Simple single-column layout
+	fields := []components.FormField{
+		{Key: "size", Label: "Size", Type: components.FieldSelect, Value: size, Options: []string{"Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"}},
+		{Key: "alignment", Label: "Alignment", Type: components.FieldSelect, Value: alignment, Options: []string{"Lawful Good", "Neutral Good", "Chaotic Good", "Lawful Neutral", "Neutral", "Chaotic Neutral", "Lawful Evil", "Neutral Evil", "Chaotic Evil"}},
+		{Key: "gender", Label: "Gender", Type: components.FieldText, Value: gender, Placeholder: "Gender"},
+		{Key: "height", Label: "Height", Type: components.FieldText, Value: height, Placeholder: "5'10\""},
+		{Key: "weight", Label: "Weight", Type: components.FieldText, Value: weight, Placeholder: "180 lbs"},
+		{Key: "age", Label: "Age", Type: components.FieldText, Value: age, Placeholder: "25"},
+		{Key: "faith", Label: "Faith/Deity", Type: components.FieldText, Value: faith, Placeholder: "Deity or faith"},
+		{Key: "hair", Label: "Hair", Type: components.FieldText, Value: hair, Placeholder: "Hair color/style"},
+		{Key: "eyes", Label: "Eyes", Type: components.FieldText, Value: eyes, Placeholder: "Eye color"},
+		{Key: "skin", Label: "Skin", Type: components.FieldText, Value: skin, Placeholder: "Skin tone"},
+		{Key: "traits", Label: "Personality", Type: components.FieldText, Value: traits, Placeholder: "Personality traits"},
+		{Key: "ideals", Label: "Ideals", Type: components.FieldText, Value: ideals, Placeholder: "Ideals"},
+		{Key: "bonds", Label: "Bonds", Type: components.FieldText, Value: bonds, Placeholder: "Bonds"},
+		{Key: "flaws", Label: "Flaws", Type: components.FieldText, Value: flaws, Placeholder: "Flaws"},
+		{Key: "backstory", Label: "Backstory", Type: components.FieldText, Value: backstory, Placeholder: "Character backstory"},
+		{Key: "allies", Label: "Allies", Type: components.FieldText, Value: allies, Placeholder: "Allies & organizations"},
+	}
+
+	s.backgroundModal = components.NewModal("Edit Background", fields, s.styles)
+	s.backgroundModal.SetSize(s.width, s.height)
+	s.backgroundModal.Show()
+}
+
+// saveBackgroundDetails saves the background modal values to the database
+func (s *SheetScreen) saveBackgroundDetails(values map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		// Ensure character_details row exists
+		if s.details == nil {
+			details, err := s.queries.CreateCharacterDetails(s.ctx, s.char.ID)
+			if err != nil {
+				return StatusMsg{Message: fmt.Sprintf("Error creating details: %v", err), IsError: true}
+			}
+			s.details = &details
+		}
+
+		// Update the details
+		params := db.UpdateCharacterDetailsParams{
+			CharacterID:        s.char.ID,
+			Age:                pgtype.Text{String: values["age"], Valid: values["age"] != ""},
+			Height:             pgtype.Text{String: values["height"], Valid: values["height"] != ""},
+			Weight:             pgtype.Text{String: values["weight"], Valid: values["weight"] != ""},
+			Eyes:               pgtype.Text{String: values["eyes"], Valid: values["eyes"] != ""},
+			Skin:               pgtype.Text{String: values["skin"], Valid: values["skin"] != ""},
+			Hair:               pgtype.Text{String: values["hair"], Valid: values["hair"] != ""},
+			Size:               pgtype.Text{String: values["size"], Valid: values["size"] != ""},
+			Gender:             pgtype.Text{String: values["gender"], Valid: values["gender"] != ""},
+			FaithDeity:         pgtype.Text{String: values["faith"], Valid: values["faith"] != ""},
+			PersonalityTraits:  pgtype.Text{String: values["traits"], Valid: values["traits"] != ""},
+			Ideals:             pgtype.Text{String: values["ideals"], Valid: values["ideals"] != ""},
+			Bonds:              pgtype.Text{String: values["bonds"], Valid: values["bonds"] != ""},
+			Flaws:              pgtype.Text{String: values["flaws"], Valid: values["flaws"] != ""},
+			Backstory:          pgtype.Text{String: values["backstory"], Valid: values["backstory"] != ""},
+			AlliesOrganizations: pgtype.Text{String: values["allies"], Valid: values["allies"] != ""},
+		}
+
+		updated, err := s.queries.UpdateCharacterDetails(s.ctx, params)
+		if err != nil {
+			return StatusMsg{Message: fmt.Sprintf("Error saving: %v", err), IsError: true}
+		}
+		s.details = &updated
+
+		// Update alignment in characters table if changed
+		if alignment := values["alignment"]; alignment != "" {
+			charUpdated, err := s.queries.UpdateCharacterAlignment(s.ctx, db.UpdateCharacterAlignmentParams{
+				ID:        s.char.ID,
+				Alignment: pgtype.Text{String: alignment, Valid: true},
+			})
+			if err != nil {
+				return StatusMsg{Message: fmt.Sprintf("Error saving alignment: %v", err), IsError: true}
+			}
+			s.char = charUpdated
+		}
+
+		return StatusMsg{Message: "Background saved", IsError: false}
+	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/nav-inc/pomegranate"
 )
 
-//go:embed 00001_initial_schema 00002_expanded_character_sheet
+//go:embed 00001_initial_schema 00002_expanded_character_sheet 00003_add_size_gender
 var embedded embed.FS
 
 // Run executes all pending migrations against the database
