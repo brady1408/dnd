@@ -969,49 +969,39 @@ func (s *SheetScreen) View() string {
 }
 
 func (s *SheetScreen) viewCore() string {
-	var b strings.Builder
-
 	// Ability scores
 	abilities := []struct {
 		name  string
+		abbr  string
 		score int32
 	}{
-		{"Strength", s.char.Strength},
-		{"Dexterity", s.char.Dexterity},
-		{"Constitution", s.char.Constitution},
-		{"Intelligence", s.char.Intelligence},
-		{"Wisdom", s.char.Wisdom},
-		{"Charisma", s.char.Charisma},
+		{"Strength", "STR", s.char.Strength},
+		{"Dexterity", "DEX", s.char.Dexterity},
+		{"Constitution", "CON", s.char.Constitution},
+		{"Intelligence", "INT", s.char.Intelligence},
+		{"Wisdom", "WIS", s.char.Wisdom},
+		{"Charisma", "CHA", s.char.Charisma},
 	}
 
 	profBonus := character.ProficiencyBonus(int(s.char.Level))
 
-	b.WriteString(s.styles.Header.Render("Ability Scores"))
-	b.WriteString("\n\n")
-
-	// Use fixed-width columns for alignment
-	labelWidth := 14
-	scoreWidth := 3
-	modWidth := 4
+	// Build left column: Ability Scores
+	var leftCol strings.Builder
+	leftCol.WriteString(s.styles.Header.Render("Ability Scores"))
+	leftCol.WriteString("\n\n")
 
 	for _, a := range abilities {
 		mod := character.AbilityModifier(int(a.score))
-		// Pad the name manually before styling
-		paddedName := fmt.Sprintf("%-*s", labelWidth, a.name)
-		paddedScore := fmt.Sprintf("%*d", scoreWidth, a.score)
-		paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
-
-		b.WriteString(s.styles.Muted.Render(paddedName))
-		b.WriteString("  ")
-		b.WriteString(s.styles.StatValue.Render(paddedScore))
-		b.WriteString("  ")
-		b.WriteString(s.styles.StatMod.Render(paddedMod))
-		b.WriteString("\n")
+		leftCol.WriteString(fmt.Sprintf("  %-3s %2d  %s\n",
+			a.abbr,
+			a.score,
+			s.styles.StatMod.Render(character.FormatModifierInt(mod))))
 	}
 
-	b.WriteString("\n")
-	b.WriteString(s.styles.Header.Render("Saving Throws"))
-	b.WriteString("\n\n")
+	// Build right column: Saving Throws
+	var rightCol strings.Builder
+	rightCol.WriteString(s.styles.Header.Render("Saving Throws"))
+	rightCol.WriteString("\n\n")
 
 	for _, a := range abilities {
 		proficient := false
@@ -1023,25 +1013,34 @@ func (s *SheetScreen) viewCore() string {
 		}
 
 		mod := character.SavingThrow(int(a.score), int(s.char.Level), proficient)
-		profMark := "  "
+		profMark := "○"
 		style := s.styles.NotProficient
 		if proficient {
-			profMark = "● "
+			profMark = "●"
 			style = s.styles.Proficient
 		}
-		paddedName := fmt.Sprintf("%-*s", labelWidth, a.name)
-		paddedMod := fmt.Sprintf("%*s", modWidth, character.FormatModifierInt(mod))
-		b.WriteString(style.Render(profMark + paddedName + "  " + paddedMod))
-		b.WriteString("\n")
+		rightCol.WriteString(style.Render(fmt.Sprintf("  %s %-3s  %s\n",
+			profMark,
+			a.abbr,
+			character.FormatModifierInt(mod))))
 	}
 
+	// Join columns horizontally with gap
+	topSection := lipgloss.JoinHorizontal(lipgloss.Top,
+		leftCol.String(),
+		"    ", // gap between columns
+		rightCol.String(),
+	)
+
+	// Build the full view
+	var b strings.Builder
+	b.WriteString(topSection)
 	b.WriteString("\n")
 	b.WriteString("Proficiency Bonus: ")
 	b.WriteString(s.styles.StatValue.Render(character.FormatModifierInt(profBonus)))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Skills section
-	b.WriteString("\n")
 	b.WriteString(s.styles.Header.Render("Skills"))
 	b.WriteString("\n\n")
 	b.WriteString(s.skillsTable.View())
