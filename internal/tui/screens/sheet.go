@@ -22,9 +22,14 @@ type SheetMode int
 const (
 	ModeView SheetMode = iota
 	ModeEditHP
+	ModeEditDamage
+	ModeEditHeal
 	ModeEditNotes
 	ModeEditFeatures
 	ModeEditBackground
+	ModeAddAttack
+	ModeAddAction
+	ModeAddSpell
 	ModeHelp
 )
 
@@ -41,9 +46,14 @@ type SheetScreen struct {
 
 	// Edit mode inputs
 	hpInput         textinput.Model
+	damageInput     textinput.Model
+	healInput       textinput.Model
 	notesInput      textarea.Model
 	featuresInput   textarea.Model
 	backgroundModal *components.ModalModel
+	attackModal     *components.ModalModel
+	actionModal     *components.ModalModel
+	spellModal      *components.ModalModel
 	editCursor      int
 
 	// Table components
@@ -99,6 +109,16 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 	hpInput.Placeholder = "HP"
 	hpInput.Width = 10
 	hpInput.CharLimit = 5
+
+	damageInput := textinput.New()
+	damageInput.Placeholder = "0"
+	damageInput.Width = 6
+	damageInput.CharLimit = 4
+
+	healInput := textinput.New()
+	healInput.Placeholder = "0"
+	healInput.Width = 6
+	healInput.CharLimit = 4
 
 	notesInput := textarea.New()
 	notesInput.Placeholder = "Enter notes here..."
@@ -192,6 +212,8 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 		styles:          s,
 		mode:            ModeView,
 		hpInput:         hpInput,
+		damageInput:     damageInput,
+		healInput:       healInput,
 		notesInput:      notesInput,
 		featuresInput:   featuresInput,
 		width:           80,
@@ -203,6 +225,8 @@ func NewSheetScreen(ctx context.Context, queries *db.Queries, char db.Character,
 		magicItemsTable: magicItemsTable,
 		spellsTable:     spellsTable,
 		featuresTable:   featuresTable,
+		combatFocus:     1, // Default to Attacks tab
+		inventoryFocus:  1, // Default to Equipment tab
 	}
 
 	// Populate tables
@@ -591,10 +615,34 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.mode = ModeView
 			return s, s.saveBackgroundDetails(msg.Values)
 		}
+		if s.mode == ModeAddAttack {
+			s.mode = ModeView
+			return s, s.saveAttack(msg.Values)
+		}
+		if s.mode == ModeAddAction {
+			s.mode = ModeView
+			return s, s.saveAction(msg.Values)
+		}
+		if s.mode == ModeAddSpell {
+			s.mode = ModeView
+			return s, s.saveSpell(msg.Values)
+		}
 	case components.ModalCancelMsg:
 		if s.mode == ModeEditBackground {
 			s.mode = ModeView
 			s.backgroundModal = nil
+		}
+		if s.mode == ModeAddAttack {
+			s.mode = ModeView
+			s.attackModal = nil
+		}
+		if s.mode == ModeAddAction {
+			s.mode = ModeView
+			s.actionModal = nil
+		}
+		if s.mode == ModeAddSpell {
+			s.mode = ModeView
+			s.spellModal = nil
 		}
 		return s, nil
 	}
@@ -609,6 +657,14 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			return s.updateEditHP(keyMsg)
 		}
+	case ModeEditDamage:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			return s.updateEditDamage(keyMsg)
+		}
+	case ModeEditHeal:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			return s.updateEditHeal(keyMsg)
+		}
 	case ModeEditNotes:
 		return s.updateEditNotes(msg)
 	case ModeEditFeatures:
@@ -617,6 +673,24 @@ func (s *SheetScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if s.backgroundModal != nil {
 			var cmd tea.Cmd
 			s.backgroundModal, cmd = s.backgroundModal.Update(msg)
+			return s, cmd
+		}
+	case ModeAddAttack:
+		if s.attackModal != nil {
+			var cmd tea.Cmd
+			s.attackModal, cmd = s.attackModal.Update(msg)
+			return s, cmd
+		}
+	case ModeAddAction:
+		if s.actionModal != nil {
+			var cmd tea.Cmd
+			s.actionModal, cmd = s.actionModal.Update(msg)
+			return s, cmd
+		}
+	case ModeAddSpell:
+		if s.spellModal != nil {
+			var cmd tea.Cmd
+			s.spellModal, cmd = s.spellModal.Update(msg)
 			return s, cmd
 		}
 	case ModeHelp:
@@ -648,14 +722,14 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if s.tab == 1 {
 		switch msg.String() {
 		case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
-			// Pass to focused table
-			if s.combatFocus == 1 {
-				var cmd tea.Cmd
-				s.attacksTable, cmd = s.attacksTable.Update(msg)
-				return s, cmd
-			} else if s.combatFocus == 2 {
+			// Pass to the currently visible table
+			if s.combatFocus == 2 {
 				var cmd tea.Cmd
 				s.actionsTable, cmd = s.actionsTable.Update(msg)
+				return s, cmd
+			} else {
+				var cmd tea.Cmd
+				s.attacksTable, cmd = s.attacksTable.Update(msg)
 				return s, cmd
 			}
 		case "1":
@@ -666,6 +740,17 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.combatFocus = 2
 			s.updateTableFocus()
 			return s, nil
+		case "a":
+			// Add attack or action based on current sub-tab
+			if s.combatFocus == 2 {
+				s.openActionModal()
+				s.mode = ModeAddAction
+				return s, textinput.Blink
+			} else {
+				s.openAttackModal()
+				s.mode = ModeAddAttack
+				return s, textinput.Blink
+			}
 		}
 	}
 
@@ -686,6 +771,24 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			s.refreshSpellsTable()
 			return s, nil
+		case "a":
+			s.openSpellModal()
+			s.mode = ModeAddSpell
+			return s, textinput.Blink
+		case "d", "x":
+			// Delete selected spell
+			if row := s.spellsTable.GetSelectedRow(); row != nil {
+				if spell, ok := row.Data.(db.CharacterSpell); ok {
+					return s, s.deleteSpell(spell.ID)
+				}
+			}
+		case "p", " ":
+			// Toggle prepared status on selected spell
+			if row := s.spellsTable.GetSelectedRow(); row != nil {
+				if spell, ok := row.Data.(db.CharacterSpell); ok {
+					return s, s.toggleSpellPrepared(spell.ID)
+				}
+			}
 		}
 	}
 
@@ -781,6 +884,22 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return s, textarea.Blink
 		}
 
+	case "-":
+		if s.tab == 1 { // Combat tab - damage
+			s.mode = ModeEditDamage
+			s.damageInput.SetValue("")
+			s.damageInput.Focus()
+			return s, textinput.Blink
+		}
+
+	case "+", "=":
+		if s.tab == 1 { // Combat tab - heal (= is unshifted +)
+			s.mode = ModeEditHeal
+			s.healInput.SetValue("")
+			s.healInput.Focus()
+			return s, textinput.Blink
+		}
+
 	case "f":
 		if s.tab == 6 { // Notes tab - edit features & traits
 			s.mode = ModeEditFeatures
@@ -809,12 +928,14 @@ func (s *SheetScreen) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // updateTableFocus sets focus on the appropriate table based on current tab
 func (s *SheetScreen) updateTableFocus() {
 	s.skillsTable.SetFocused(s.tab == 0)
-	s.attacksTable.SetFocused(s.tab == 1 && s.combatFocus == 1)
+	// Combat tab: only the visible sub-tab table is focused
+	s.attacksTable.SetFocused(s.tab == 1 && s.combatFocus != 2)
 	s.actionsTable.SetFocused(s.tab == 1 && s.combatFocus == 2)
 	s.spellsTable.SetFocused(s.tab == 2)
-	s.inventoryTable.SetFocused(s.tab == 3 && s.inventoryFocus == 1)
-	s.featuresTable.SetFocused(s.tab == 4)
+	// Inventory tab: only the visible sub-tab table is focused
+	s.inventoryTable.SetFocused(s.tab == 3 && s.inventoryFocus != 2)
 	s.magicItemsTable.SetFocused(s.tab == 3 && s.inventoryFocus == 2)
+	s.featuresTable.SetFocused(s.tab == 4)
 }
 
 func (s *SheetScreen) updateEditHP(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -838,6 +959,58 @@ func (s *SheetScreen) updateEditHP(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	s.hpInput, cmd = s.hpInput.Update(msg)
+	return s, cmd
+}
+
+func (s *SheetScreen) updateEditDamage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		var damage int
+		fmt.Sscanf(s.damageInput.Value(), "%d", &damage)
+		if damage < 0 {
+			damage = 0
+		}
+
+		newHP := int(s.char.CurrentHitPoints) - damage
+		if newHP < 0 {
+			newHP = 0
+		}
+
+		return s, s.updateHP(int32(newHP))
+
+	case "esc":
+		s.mode = ModeView
+		return s, nil
+	}
+
+	var cmd tea.Cmd
+	s.damageInput, cmd = s.damageInput.Update(msg)
+	return s, cmd
+}
+
+func (s *SheetScreen) updateEditHeal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		var heal int
+		fmt.Sscanf(s.healInput.Value(), "%d", &heal)
+		if heal < 0 {
+			heal = 0
+		}
+
+		newHP := int(s.char.CurrentHitPoints) + heal
+		if newHP > int(s.char.MaxHitPoints) {
+			newHP = int(s.char.MaxHitPoints)
+		}
+
+		return s, s.updateHP(int32(newHP))
+
+	case "esc":
+		s.mode = ModeView
+		return s, nil
+	}
+
+	var cmd tea.Cmd
+	s.healInput, cmd = s.healInput.Update(msg)
 	return s, cmd
 }
 
@@ -993,6 +1166,21 @@ func (s *SheetScreen) View() string {
 		return s.backgroundModal.ViewWithOverlay(content, s.width, s.height)
 	}
 
+	// Overlay attack modal if adding
+	if s.mode == ModeAddAttack && s.attackModal != nil {
+		return s.attackModal.ViewWithOverlay(content, s.width, s.height)
+	}
+
+	// Overlay action modal if adding
+	if s.mode == ModeAddAction && s.actionModal != nil {
+		return s.actionModal.ViewWithOverlay(content, s.width, s.height)
+	}
+
+	// Overlay spell modal if adding
+	if s.mode == ModeAddSpell && s.spellModal != nil {
+		return s.spellModal.ViewWithOverlay(content, s.width, s.height)
+	}
+
 	return content
 }
 
@@ -1090,7 +1278,15 @@ func (s *SheetScreen) viewCombat() string {
 	hitDie := character.ClassHitDice[s.char.Class]
 
 	// Compact single-line stats bar
-	if s.mode == ModeEditHP {
+	hpStr := fmt.Sprintf("%s/%s",
+		hpStyle.Render(fmt.Sprintf("%d", s.char.CurrentHitPoints)),
+		s.styles.HPMax.Render(fmt.Sprintf("%d", s.char.MaxHitPoints)))
+	if s.char.TemporaryHitPoints > 0 {
+		hpStr += fmt.Sprintf("+%d", s.char.TemporaryHitPoints)
+	}
+
+	switch s.mode {
+	case ModeEditHP:
 		b.WriteString(fmt.Sprintf("  HP: %s/%d  |  AC: %d  |  Init: %s  |  Speed: %d ft  |  HD: %dd%d\n",
 			s.hpInput.View(),
 			s.char.MaxHitPoints,
@@ -1099,13 +1295,25 @@ func (s *SheetScreen) viewCombat() string {
 			s.char.Speed,
 			s.char.Level,
 			hitDie))
-	} else {
-		hpStr := fmt.Sprintf("%s/%s",
-			hpStyle.Render(fmt.Sprintf("%d", s.char.CurrentHitPoints)),
-			s.styles.HPMax.Render(fmt.Sprintf("%d", s.char.MaxHitPoints)))
-		if s.char.TemporaryHitPoints > 0 {
-			hpStr += fmt.Sprintf("+%d", s.char.TemporaryHitPoints)
-		}
+	case ModeEditDamage:
+		b.WriteString(fmt.Sprintf("  HP: %s -%s  |  AC: %d  |  Init: %s  |  Speed: %d ft  |  HD: %dd%d\n",
+			hpStr,
+			s.damageInput.View(),
+			s.char.ArmorClass,
+			character.FormatModifierInt(initiative),
+			s.char.Speed,
+			s.char.Level,
+			hitDie))
+	case ModeEditHeal:
+		b.WriteString(fmt.Sprintf("  HP: %s +%s  |  AC: %d  |  Init: %s  |  Speed: %d ft  |  HD: %dd%d\n",
+			hpStr,
+			s.healInput.View(),
+			s.char.ArmorClass,
+			character.FormatModifierInt(initiative),
+			s.char.Speed,
+			s.char.Level,
+			hitDie))
+	default:
 		b.WriteString(fmt.Sprintf("  HP: %s  |  AC: %d  |  Init: %s  |  Speed: %d ft  |  HD: %dd%d\n",
 			hpStr,
 			s.char.ArmorClass,
@@ -1115,25 +1323,27 @@ func (s *SheetScreen) viewCombat() string {
 			hitDie))
 	}
 
-	// Attacks section
+	// Sub-tabs for Attacks/Actions
 	b.WriteString("\n")
-	attacksHeader := "Attacks"
-	if s.combatFocus == 1 {
-		attacksHeader = "▶ Attacks"
+	if s.combatFocus != 2 {
+		b.WriteString(s.styles.FocusedButton.Render("[1:Attacks]"))
+	} else {
+		b.WriteString(s.styles.Button.Render(" 1:Attacks "))
 	}
-	b.WriteString(s.styles.Header.Render(attacksHeader))
-	b.WriteString("\n\n")
-	b.WriteString(s.attacksTable.View())
-
-	// Actions section
-	b.WriteString("\n")
-	actionsHeader := "Actions"
+	b.WriteString(" ")
 	if s.combatFocus == 2 {
-		actionsHeader = "▶ Actions"
+		b.WriteString(s.styles.FocusedButton.Render("[2:Actions]"))
+	} else {
+		b.WriteString(s.styles.Button.Render(" 2:Actions "))
 	}
-	b.WriteString(s.styles.Header.Render(actionsHeader))
 	b.WriteString("\n\n")
-	b.WriteString(s.actionsTable.View())
+
+	// Show the selected table
+	if s.combatFocus == 2 {
+		b.WriteString(s.actionsTable.View())
+	} else {
+		b.WriteString(s.attacksTable.View())
+	}
 
 	// Wrap in a left-aligned box so the colon alignment works
 	return lipgloss.NewStyle().
@@ -1520,6 +1730,10 @@ func (s *SheetScreen) getHelp() string {
 	switch s.mode {
 	case ModeEditHP:
 		return "enter: save • esc: cancel"
+	case ModeEditDamage:
+		return "enter: apply damage • esc: cancel"
+	case ModeEditHeal:
+		return "enter: apply healing • esc: cancel"
 	case ModeEditNotes, ModeEditFeatures:
 		return "ctrl+s: save • esc: cancel"
 	default:
@@ -1528,9 +1742,9 @@ func (s *SheetScreen) getHelp() string {
 		case 0: // Core
 			help += " • j/k: navigate skills"
 		case 1: // Combat
-			help += " • e: edit HP • 1: attacks • 2: actions • j/k: navigate"
+			help += " • -: damage • +: heal • e: set HP • 1: attacks • 2: actions • a: add"
 		case 2: // Spells
-			help += " • 0-9: filter by level • j/k: navigate"
+			help += " • 0-9: filter • a: add • d: delete • p: toggle prepared"
 		case 3: // Inventory
 			help += " • 1: equipment • 2: magic items • j/k: navigate"
 		case 4: // Features
@@ -1573,8 +1787,8 @@ func (s *SheetScreen) renderHelpOverlay(background string) string {
 	// Tab-specific
 	b.WriteString(s.styles.Header.Render("Tab-Specific"))
 	b.WriteString("\n")
-	b.WriteString("  Combat:     e: edit HP, 1/2: switch tables\n")
-	b.WriteString("  Spells:     0-9: filter by level\n")
+	b.WriteString("  Combat:     -: damage, +: heal, e: set HP, 1/2: tabs, a: add\n")
+	b.WriteString("  Spells:     0-9: filter, a: add, d: delete, p: prepared\n")
 	b.WriteString("  Inventory:  1/2: switch tables\n")
 	b.WriteString("  Features:   1-4: filter by type\n")
 	b.WriteString("  Background: e: edit details\n")
@@ -1744,5 +1958,223 @@ func (s *SheetScreen) saveBackgroundDetails(values map[string]string) tea.Cmd {
 		}
 
 		return StatusMsg{Message: "Background saved", IsError: false}
+	}
+}
+
+// openAttackModal creates and shows the attack add modal
+func (s *SheetScreen) openAttackModal() {
+	fields := []components.FormField{
+		{Key: "name", Label: "Weapon Name", Type: components.FieldText, Required: true, Placeholder: "Longsword"},
+		{Key: "attack_bonus", Label: "Attack Bonus", Type: components.FieldNumber, Placeholder: "+5"},
+		{Key: "damage", Label: "Damage", Type: components.FieldText, Placeholder: "1d8+3"},
+		{Key: "damage_type", Label: "Damage Type", Type: components.FieldSelect, Options: []string{"Slashing", "Piercing", "Bludgeoning", "Fire", "Cold", "Lightning", "Acid", "Poison", "Necrotic", "Radiant", "Force", "Psychic", "Thunder"}},
+		{Key: "range", Label: "Range", Type: components.FieldText, Placeholder: "5 ft or 20/60 ft"},
+		{Key: "properties", Label: "Properties", Type: components.FieldText, Placeholder: "Versatile, Finesse"},
+		{Key: "notes", Label: "Notes", Type: components.FieldText, Placeholder: "Additional notes"},
+	}
+
+	s.attackModal = components.NewModal("Add Attack", fields, s.styles)
+	s.attackModal.SetSize(s.width, s.height)
+	s.attackModal.Show()
+}
+
+// saveAttack saves the attack modal values to the database
+func (s *SheetScreen) saveAttack(values map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		// Parse attack bonus
+		var attackBonus pgtype.Int4
+		if values["attack_bonus"] != "" {
+			var bonus int
+			// Handle both "+5" and "5" formats
+			bonusStr := strings.TrimPrefix(values["attack_bonus"], "+")
+			if _, err := fmt.Sscanf(bonusStr, "%d", &bonus); err == nil {
+				attackBonus = pgtype.Int4{Int32: int32(bonus), Valid: true}
+			}
+		}
+
+		// Calculate sort order (append to end)
+		sortOrder := int32(len(s.attacks))
+
+		params := db.CreateCharacterAttackParams{
+			CharacterID: s.char.ID,
+			SortOrder:   pgtype.Int4{Int32: sortOrder, Valid: true},
+			Name:        values["name"],
+			AttackBonus: attackBonus,
+			Damage:      pgtype.Text{String: values["damage"], Valid: values["damage"] != ""},
+			DamageType:  pgtype.Text{String: values["damage_type"], Valid: values["damage_type"] != ""},
+			Range:       pgtype.Text{String: values["range"], Valid: values["range"] != ""},
+			Properties:  pgtype.Text{String: values["properties"], Valid: values["properties"] != ""},
+			Notes:       pgtype.Text{String: values["notes"], Valid: values["notes"] != ""},
+		}
+
+		_, err := s.queries.CreateCharacterAttack(s.ctx, params)
+		if err != nil {
+			return StatusMsg{Message: fmt.Sprintf("Error adding attack: %v", err), IsError: true}
+		}
+
+		// Refresh the attacks table
+		s.refreshAttacksTable()
+		s.attackModal = nil
+
+		return StatusMsg{Message: "Attack added", IsError: false}
+	}
+}
+
+// openActionModal creates and shows the action add modal
+func (s *SheetScreen) openActionModal() {
+	fields := []components.FormField{
+		{Key: "name", Label: "Action Name", Type: components.FieldText, Required: true, Placeholder: "Second Wind"},
+		{Key: "action_type", Label: "Type", Type: components.FieldSelect, Options: []string{"action", "bonus action", "reaction", "free", "movement", "other"}},
+		{Key: "source", Label: "Source", Type: components.FieldText, Placeholder: "Fighter 1"},
+		{Key: "uses_max", Label: "Max Uses", Type: components.FieldNumber, Placeholder: "1"},
+		{Key: "uses_per", Label: "Recharge", Type: components.FieldSelect, Options: []string{"", "short rest", "long rest", "dawn", "dusk"}},
+		{Key: "description", Label: "Description", Type: components.FieldText, Placeholder: "Regain 1d10 + level HP"},
+	}
+
+	s.actionModal = components.NewModal("Add Action", fields, s.styles)
+	s.actionModal.SetSize(s.width, s.height)
+	s.actionModal.Show()
+}
+
+// saveAction saves the action modal values to the database
+func (s *SheetScreen) saveAction(values map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		// Parse uses max
+		var usesMax pgtype.Int4
+		if values["uses_max"] != "" {
+			var max int
+			if _, err := fmt.Sscanf(values["uses_max"], "%d", &max); err == nil {
+				usesMax = pgtype.Int4{Int32: int32(max), Valid: true}
+			}
+		}
+
+		// Calculate sort order (append to end)
+		sortOrder := int32(len(s.actions))
+
+		params := db.CreateCharacterActionParams{
+			CharacterID: s.char.ID,
+			SortOrder:   pgtype.Int4{Int32: sortOrder, Valid: true},
+			Name:        values["name"],
+			ActionType:  pgtype.Text{String: values["action_type"], Valid: values["action_type"] != ""},
+			Source:      pgtype.Text{String: values["source"], Valid: values["source"] != ""},
+			Description: pgtype.Text{String: values["description"], Valid: values["description"] != ""},
+			UsesPer:     pgtype.Text{String: values["uses_per"], Valid: values["uses_per"] != ""},
+			UsesMax:     usesMax,
+			UsesCurrent: usesMax, // Start with full uses
+		}
+
+		_, err := s.queries.CreateCharacterAction(s.ctx, params)
+		if err != nil {
+			return StatusMsg{Message: fmt.Sprintf("Error adding action: %v", err), IsError: true}
+		}
+
+		// Refresh the actions table
+		s.refreshActionsTable()
+		s.actionModal = nil
+
+		return StatusMsg{Message: "Action added", IsError: false}
+	}
+}
+
+// openSpellModal creates and shows the spell add modal
+func (s *SheetScreen) openSpellModal() {
+	// Default to current filter level, or 0 for cantrips if showing all
+	defaultLevel := "0"
+	if s.spellLevelFilter >= 0 {
+		defaultLevel = fmt.Sprintf("%d", s.spellLevelFilter)
+	}
+
+	fields := []components.FormField{
+		{Key: "name", Label: "Spell Name", Type: components.FieldText, Required: true, Placeholder: "Fireball"},
+		{Key: "level", Label: "Level", Type: components.FieldSelect, Value: defaultLevel, Options: []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}},
+		{Key: "school", Label: "School", Type: components.FieldSelect, Options: []string{"Abjuration", "Conjuration", "Divination", "Enchantment", "Evocation", "Illusion", "Necromancy", "Transmutation"}},
+		{Key: "casting_time", Label: "Casting Time", Type: components.FieldText, Placeholder: "1 action"},
+		{Key: "range", Label: "Range", Type: components.FieldText, Placeholder: "150 feet"},
+		{Key: "components", Label: "Components", Type: components.FieldText, Placeholder: "V, S, M"},
+		{Key: "duration", Label: "Duration", Type: components.FieldText, Placeholder: "Instantaneous"},
+		{Key: "is_ritual", Label: "Ritual", Type: components.FieldCheckbox},
+		{Key: "is_prepared", Label: "Prepared", Type: components.FieldCheckbox},
+		{Key: "source", Label: "Source", Type: components.FieldText, Placeholder: "PHB"},
+	}
+
+	s.spellModal = components.NewModal("Add Spell", fields, s.styles)
+	s.spellModal.SetSize(s.width, s.height)
+	s.spellModal.Show()
+}
+
+// saveSpell saves the spell modal values to the database
+func (s *SheetScreen) saveSpell(values map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		// Parse level
+		var level int32
+		if values["level"] != "" {
+			var lvl int
+			if _, err := fmt.Sscanf(values["level"], "%d", &lvl); err == nil {
+				level = int32(lvl)
+			}
+		}
+
+		// Parse booleans
+		isPrepared := values["is_prepared"] == "true"
+		isRitual := values["is_ritual"] == "true"
+
+		params := db.CreateCharacterSpellParams{
+			CharacterID: s.char.ID,
+			Name:        values["name"],
+			Level:       level,
+			School:      pgtype.Text{String: values["school"], Valid: values["school"] != ""},
+			IsPrepared:  pgtype.Bool{Bool: isPrepared, Valid: true},
+			IsRitual:    pgtype.Bool{Bool: isRitual, Valid: true},
+			CastingTime: pgtype.Text{String: values["casting_time"], Valid: values["casting_time"] != ""},
+			Range:       pgtype.Text{String: values["range"], Valid: values["range"] != ""},
+			Components:  pgtype.Text{String: values["components"], Valid: values["components"] != ""},
+			Duration:    pgtype.Text{String: values["duration"], Valid: values["duration"] != ""},
+			Source:      pgtype.Text{String: values["source"], Valid: values["source"] != ""},
+		}
+
+		_, err := s.queries.CreateCharacterSpell(s.ctx, params)
+		if err != nil {
+			return StatusMsg{Message: fmt.Sprintf("Error adding spell: %v", err), IsError: true}
+		}
+
+		// Refresh the spells table
+		s.refreshSpellsTable()
+		s.spellModal = nil
+
+		return StatusMsg{Message: "Spell added", IsError: false}
+	}
+}
+
+// deleteSpell deletes a spell from the database
+func (s *SheetScreen) deleteSpell(spellID pgtype.UUID) tea.Cmd {
+	return func() tea.Msg {
+		err := s.queries.DeleteCharacterSpell(s.ctx, spellID)
+		if err != nil {
+			return StatusMsg{Message: fmt.Sprintf("Error deleting spell: %v", err), IsError: true}
+		}
+
+		// Refresh the spells table
+		s.refreshSpellsTable()
+
+		return StatusMsg{Message: "Spell deleted", IsError: false}
+	}
+}
+
+// toggleSpellPrepared toggles the prepared status of a spell
+func (s *SheetScreen) toggleSpellPrepared(spellID pgtype.UUID) tea.Cmd {
+	return func() tea.Msg {
+		updated, err := s.queries.ToggleSpellPrepared(s.ctx, spellID)
+		if err != nil {
+			return StatusMsg{Message: fmt.Sprintf("Error toggling spell: %v", err), IsError: true}
+		}
+
+		// Refresh the spells table
+		s.refreshSpellsTable()
+
+		status := "unprepared"
+		if updated.IsPrepared.Valid && updated.IsPrepared.Bool {
+			status = "prepared"
+		}
+		return StatusMsg{Message: fmt.Sprintf("%s %s", updated.Name, status), IsError: false}
 	}
 }
